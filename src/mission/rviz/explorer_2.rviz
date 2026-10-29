@@ -1,0 +1,50 @@
+Panels:
+  - Class: rviz_common/Displays
+    Name: Displays
+Visualization Manager:
+  Class: ""
+  Global Options:
+    Fixed Frame: explorer_2/odom
+    Background Color: 40; 40; 40
+    Frame Rate: 20
+  Displays:
+    - Class: rviz_default_plugins/Grid
+      Name: Grid
+      Enabled: true
+      Cell Size: 1
+    - Class: rviz_default_plugins/RobotModel
+      Name: explorer_2
+      Enabled: true
+      Description Source: Topic
+      Description Topic:
+        Value: /explorer_2/robot_description
+        Durability Policy: Transient Local
+      TF Prefix: explorer_2
+    - Class: rviz_default_plugins/LaserScan
+      Name: LiDAR
+      Enabled: true
+      Topic:
+        Value: /explorer_2/scan
+        Reliability Policy: Best Effort
+      Size (m): 0.025
+    - Class: rviz_default_plugins/TF
+      Name: TF
+      Enabled: true
+    - Class: rviz_default_plugins/Polygon
+      Name: Stop zone
+      Enabled: true
+      Topic:
+        Value: /explorer_2/stop_zone
+    - Class: rviz_default_plugins/Polygon
+      Name: Slow zone
+      Enabled: true
+      Topic:
+        Value: /explorer_2/slow_zone
+  Views:
+    Current:
+      Class: rviz_default_plugins/TopDownOrtho
+      Scale: 80
+      Target Frame: explorer_2/base_footprint
+Window Geometry:
+  Width: 1100
+  Height: 800

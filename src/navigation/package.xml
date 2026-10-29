@@ -1,0 +1,24 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>navigation</name>
+  <version>0.1.0</version>
+  <description>Command source selection, watchdogs and Humble collision protection.</description>
+  <maintainer email="gusfipe@gmail.com">Gustavo Pellanda</maintainer>
+  <license>Apache-2.0</license>
+  <buildtool_depend>ament_cmake</buildtool_depend>
+  <depend>rclcpp</depend>
+  <depend>rcl_interfaces</depend>
+  <depend>geometry_msgs</depend>
+  <depend>sensor_msgs</depend>
+  <depend>tf2_ros</depend>
+  <depend>nav2_collision_monitor</depend>
+  <depend>rclcpp_lifecycle</depend>
+  <depend>lifecycle_msgs</depend>
+  <exec_depend>nav2_lifecycle_manager</exec_depend>
+  <exec_depend>ament_index_python</exec_depend>
+  <exec_depend>launch</exec_depend>
+  <exec_depend>launch_ros</exec_depend>
+  <exec_depend>python3-yaml</exec_depend>
+
+  <export><build_type>ament_cmake</build_type></export>
+</package>

@@ -1,0 +1,6 @@
+# Initial poses are simulator spawn coordinates, not global TF estimates.
+robots:
+  scout: {x: -5.0, y: 0.65, yaw: 0.0}
+  explorer_1: {x: -5.0, y: -0.65, yaw: 0.0}
+  explorer_2: {x: -4.2, y: -0.65, yaw: 0.0}
+demo_pose: {x: -3.0, y: 2.8, yaw: 1.57079632679}

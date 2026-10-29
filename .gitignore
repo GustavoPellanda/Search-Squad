@@ -1,0 +1,52 @@
+# Local development instructions and supporting documentation.
+AGENTS.md
+agents.md
+/project-context/
+/docs/
+.codex/
+.agents/
+
+# Colcon outputs and local validation artifacts.
+/build/
+/install/
+/log/
+/artifacts/
+*.log
+
+# Python bytecode, virtual environments and analysis/test caches.
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.cache/
+.coverage
+.coverage.*
+htmlcov/
+
+# Local ROS/Gazebo state and recorded sensor data.
+.ros/
+.gazebo/
+*.bag
+*.db3
+*.db3-wal
+*.db3-shm
+*.mcap
+
+# Local credentials and environment overrides; keep distributable examples eligible.
+.aws/
+.env
+.env.*
+!.env.example
+!.env.template
+
+# Editor and operating-system files.
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db

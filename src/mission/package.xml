@@ -1,0 +1,29 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>mission</name>
+  <version>0.1.0</version>
+  <description>Fleet composition and explicit reactive demonstration.</description>
+  <maintainer email="gusfipe@gmail.com">Gustavo Pellanda</maintainer>
+  <license>Apache-2.0</license>
+  <buildtool_depend>ament_cmake</buildtool_depend>
+  <exec_depend>simulation</exec_depend>
+  <exec_depend>navigation</exec_depend>
+  <exec_depend>explorer</exec_depend>
+  <exec_depend>rviz2</exec_depend>
+  <exec_depend>rmw_cyclonedds_cpp</exec_depend>
+  <exec_depend>ament_index_python</exec_depend>
+  <exec_depend>launch</exec_depend>
+  <exec_depend>launch_ros</exec_depend>
+  <exec_depend>python3-yaml</exec_depend>
+
+  <test_depend>rclpy</test_depend>
+  <test_depend>rcl_interfaces</test_depend>
+  <test_depend>tf2_msgs</test_depend>
+  <test_depend>rosgraph_msgs</test_depend>
+  <test_depend>gazebo_msgs</test_depend>
+  <test_depend>lifecycle_msgs</test_depend>
+  <test_depend>geometry_msgs</test_depend>
+  <test_depend>nav_msgs</test_depend>
+  <test_depend>sensor_msgs</test_depend>
+  <export><build_type>ament_cmake</build_type></export>
+</package>
