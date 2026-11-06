@@ -1,0 +1,10 @@
+/**:
+  ros__parameters:
+    # Viewpoint clearance exceeds Nav2's 0.35 m circle plus its 0.01 m padding.
+    # The reactive controller observes while stopped if there is no room to rotate:
+    clearance: 0.40
+    passage_clearance: 0.40
+    minimum_frontier_length: 0.30
+    observation_seconds: 2.5
+    exploration_timeout: 600.0
+    maximum_failed_goals: 6

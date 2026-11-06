@@ -1,5 +1,5 @@
 #!/bin/bash
-# Start the implemented fleet demonstration from a clean, workspace-local ROS environment.
+# Start the implemented fleet mission from a clean, workspace-local ROS environment.
 set -e -o pipefail
 
 project_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
@@ -28,7 +28,7 @@ exec env -i \
         source /opt/ros/humble/setup.bash
 
         if [[ ! -f "$project_root/install/local_setup.bash" ]]; then
-            echo "Build this workspace with colcon before running the demonstration." >&2
+            echo "Build this workspace with colcon before running the mission." >&2
             exit 1
         fi
         source "$project_root/install/local_setup.bash"
@@ -38,5 +38,5 @@ exec env -i \
             exit 1
         fi
 
-        exec ros2 launch mission fleet.launch.py demo:=true "$@"
-    ' search-squad-demo "$project_root" "$@"
+        exec ros2 launch mission fleet.launch.py mode:=room "$@"
+    ' search-squad-mission "$project_root" "$@"

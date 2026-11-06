@@ -87,6 +87,8 @@ def make_scan(kind: str, nanoseconds: int) -> LaserScan:
         scan.header.stamp.nanosec += NANOSECONDS_PER_SECOND
     elif kind == 'invalid_metadata':
         scan.angle_increment = math.nan
+    elif kind == 'rear_blocked':
+        scan.ranges[SCAN_RAYS // 2] = 0.30
     elif kind in ('left_blocked', 'right_blocked', 'blocked'):
         scan.ranges = obstacle_ranges(scan, kind)
     return scan
@@ -209,7 +211,7 @@ def start_nodes(processes: list[subprocess.Popen], log_path: Path) -> None:
             'base_frame': 'probe/base_footprint',
             'odom_frame': 'probe/odom',
         }),
-        ('explorer', 'reactive_demo', {'duration': '120.0'}),
+        ('explorer', 'reactive_controller', {}),
     )
     for package, executable, parameters in configurations:
         executable_path = Path(get_package_prefix(package)) / 'lib' / package / executable

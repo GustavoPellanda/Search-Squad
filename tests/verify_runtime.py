@@ -176,15 +176,23 @@ def descendants(pid: int) -> list[int]:
 def parse_arguments() -> argparse.Namespace:
     """Choose the existing integration scenario, selected explorer and report destination."""
     parser = argparse.ArgumentParser()
-    parser.add_argument('--mode', choices=('baseline', 'demo', 'protection'), default='baseline')
+    parser.add_argument('--mode', choices=('baseline', 'reactive', 'protection'), default='baseline')
     parser.add_argument('--robot', choices=('explorer_1', 'explorer_2'), default='explorer_1')
     parser.add_argument('--output', default='/tmp/search_squad_runtime.json')
+    parser.add_argument(
+        '--obstacle-pose',
+        action='store_true',
+        help='In reactive mode, use the room fixture and require slowing and turning',
+    )
     parser.add_argument(
         '--gui',
         action='store_true',
         help='Also start Gazebo GUI and the selected local RViz view',
     )
-    return parser.parse_args()
+    args = parser.parse_args()
+    if args.obstacle_pose and args.mode != 'reactive':
+        parser.error('--obstacle-pose requires --mode reactive')
+    return args
 
 
 def configure_environment() -> None:
@@ -207,16 +215,21 @@ def configure_environment() -> None:
 
 def launch_command(args: argparse.Namespace) -> list[str]:
     """Select the fleet composition without bypassing the protected input topics."""
-    launch_file = 'reactive_demo.launch.py' if args.mode == 'demo' else 'fleet.launch.py'
     command = [
-        'ros2', 'launch', 'mission', launch_file,
+        'ros2', 'launch', 'mission', 'fleet.launch.py',
         'gui:=true' if args.gui else 'gui:=false',
         'rviz:=true' if args.gui else 'rviz:=false',
+        'log_terminal:=false',
     ]
-    if args.mode == 'demo':
-        command.extend(['robot:=' + args.robot, 'duration:=30.0'])
+    if args.mode == 'reactive':
+        command.extend(['mode:=reactive', 'robot:=' + args.robot])
+        if args.obstacle_pose:
+            command.append('obstacle_test_pose:=true')
     elif args.mode == 'protection':
-        command.extend(['source:=test', 'robot:=' + args.robot, 'demo_pose:=true'])
+        command.extend(['mode:=hold', 'source:=test', 'robot:=' + args.robot,
+                        'obstacle_test_pose:=true'])
+    else:
+        command.append('mode:=hold')
     return command
 
 
@@ -312,22 +325,29 @@ def world_state(observer: Observer, state_client: Client, robot: str) -> EntityS
     return response.state
 
 
-def verify_demo(observer: Observer, robot: str, report: dict) -> None:
-    """Observe advance, slowing, turning and the existing duration-based stop."""
+def verify_reactive(
+    observer: Observer,
+    robot: str,
+    report: dict,
+    *,
+    room_fixture: bool,
+) -> None:
+    """Check continuous motion, plus obstacle reactions in the explicit room fixture."""
     observer.wait(34, sim=True)
     commands = [sample.message for sample in observer.history(robot, 'cmd_vel_reactive')]
-    require(any(command.linear.x > 0.02 for command in commands), 'Demo did not advance')
-    require(
-        any(abs(command.angular.z) > 0.1 for command in commands),
-        'Demo did not react by turning',
-    )
-    require(any(0.001 < command.linear.x < 0.11 for command in commands), 'Demo did not slow')
-    final_command_stopped = (
-        bool(commands) and abs(commands[-1].linear.x) < 0.001 and
-        abs(commands[-1].angular.z) < 0.001
-    )
-    require(final_command_stopped, 'Demo did not finish stopped')
-    report['reactive_behavior'] = 'advance, slow, turn and duration stop observed'
+    require(any(command.linear.x > 0.02 for command in commands), 'Reactive controller did not advance')
+    observed_turning = any(abs(command.angular.z) > 0.1 for command in commands)
+    observed_slowing = any(0.001 < command.linear.x < 0.11 for command in commands)
+    if room_fixture:
+        # This fixture faces a known obstacle; the corridor need not reach one in 30 seconds:
+        require(observed_turning, 'Reactive controller did not react by turning')
+        require(observed_slowing, 'Reactive controller did not slow')
+    report['reactive_behavior'] = 'continuous advance observed'
+    report['obstacle_reaction'] = {
+        'required': room_fixture,
+        'slowing_observed': observed_slowing,
+        'turning_observed': observed_turning,
+    }
 
 
 def owned_monitor_pid(launch: subprocess.Popen, robot: str) -> int:
@@ -471,7 +491,8 @@ def verify_motion(
                 displacement_m > 0.1,
                 'Selected robot encoders moved without simulator translation',
             )
-            require(body_speed_m_s < 0.01, 'Simulator body is not stopped')
+            if args.mode != 'reactive':
+                require(body_speed_m_s < 0.01, 'Simulator body is not stopped')
 
         maximum_displacement_m = 0.0
         maximum_yaw_rad = 0.0
@@ -497,7 +518,8 @@ def verify_motion(
             )
         else:
             require(maximum_displacement_m > 0.10, 'Selected robot did not translate')
-            require(final_speed < 0.01 and final_turn < 0.03, 'Selected robot not stopped at end')
+            if args.mode != 'reactive':
+                require(final_speed < 0.01 and final_turn < 0.03, 'Selected robot not stopped at end')
 
 
 def verify_scenario(
@@ -526,8 +548,8 @@ def verify_scenario(
 
     if args.mode == 'baseline':
         observer.wait(6, sim=True)
-    elif args.mode == 'demo':
-        verify_demo(observer, args.robot, report)
+    elif args.mode == 'reactive':
+        verify_reactive(observer, args.robot, report, room_fixture=args.obstacle_pose)
     else:
         verify_protection(observer, launch, args.robot, report)
     if args.gui:

@@ -2,16 +2,25 @@
 <package format="3">
   <name>explorer</name>
   <version>0.1.0</version>
-  <description>Bounded reactive LiDAR demonstration for one explorer.</description>
+  <description>Room exploration and permanent reactive LiDAR control.</description>
   <maintainer email="gusfipe@gmail.com">Gustavo Pellanda</maintainer>
   <license>Apache-2.0</license>
   <buildtool_depend>ament_cmake</buildtool_depend>
   <depend>rclcpp</depend>
+  <depend>std_msgs</depend>
+  <depend>squad_interfaces</depend>
   <depend>geometry_msgs</depend>
   <depend>sensor_msgs</depend>
   <exec_depend>ament_index_python</exec_depend>
   <exec_depend>launch</exec_depend>
   <exec_depend>launch_ros</exec_depend>
 
+  <depend>rclcpp_action</depend>
+  <depend>nav_msgs</depend>
+  <depend>nav2_msgs</depend>
+  <depend>visualization_msgs</depend>
+  <depend>tf2</depend>
+  <depend>tf2_ros</depend>
+  <test_depend>ament_cmake_gtest</test_depend>
   <export><build_type>ament_cmake</build_type></export>
 </package>

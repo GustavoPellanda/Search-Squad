@@ -79,7 +79,7 @@ def generate_launch_description() -> LaunchDescription:
     source_argument = DeclareLaunchArgument(
         'source',
         default_value='hold',
-        choices=['hold', 'reactive', 'test', 'nav'],
+        choices=['hold', 'reactive', 'test', 'nav', 'managed'],
     )
     return LaunchDescription([
         robot_argument,

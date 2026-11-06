@@ -12,6 +12,7 @@
 #include <rcl_interfaces/msg/parameter_descriptor.hpp>
 #include <rclcpp/rclcpp.hpp>
 #include <sensor_msgs/msg/laser_scan.hpp>
+#include <squad_interfaces/msg/control_lease.hpp>
 #include <tf2_ros/buffer.h>
 #include <tf2_ros/transform_listener.h>
 
@@ -32,6 +33,10 @@ class CommandGate : public rclcpp::Node
     void validate_parameters() const;
     void initialize_communication();
     void command_callback(geometry_msgs::msg::Twist::ConstSharedPtr message);
+    void managed_command_callback(
+        geometry_msgs::msg::Twist::ConstSharedPtr message, const std::string & source
+    );
+    void lease_callback(squad_interfaces::msg::ControlLease::ConstSharedPtr message);
     bool is_command_valid(const geometry_msgs::msg::Twist & command) const;
     void scan_callback(sensor_msgs::msg::LaserScan::ConstSharedPtr message);
     bool is_scan_valid(const sensor_msgs::msg::LaserScan & scan) const;
@@ -67,6 +72,14 @@ class CommandGate : public rclcpp::Node
     std::chrono::steady_clock::time_point command_arrival_{};
     std::chrono::steady_clock::time_point scan_arrival_{};
 
+    bool managed_control_ = false;
+    bool lease_valid_ = false;
+    std::uint64_t generation_ = 0;
+    std::chrono::steady_clock::time_point lease_arrival_{};
+    rclcpp::Subscription<squad_interfaces::msg::ControlLease>::SharedPtr lease_subscription_;
+    rclcpp::Subscription<geometry_msgs::msg::Twist>::SharedPtr nav_subscription_;
+    rclcpp::Subscription<geometry_msgs::msg::Twist>::SharedPtr reactive_subscription_;
+
     // Listener initialization depends on the buffer:
     tf2_ros::Buffer transform_buffer_;
     tf2_ros::TransformListener transform_listener_;
@@ -86,6 +99,8 @@ CommandGate::CommandGate()
 {
     read_parameters();
     validate_parameters();
+    managed_control_ = command_source_ == "managed";
+    if(managed_control_) command_source_ = "hold";
     initialize_communication();
 
     RCLCPP_INFO(
@@ -126,9 +141,10 @@ void CommandGate::validate_parameters() const
 
     const bool known_source =
         command_source_ == "hold" || command_source_ == "test" ||
-        command_source_ == "reactive" || command_source_ == "nav";
+        command_source_ == "reactive" || command_source_ == "nav" ||
+        command_source_ == "managed";
     if(!known_source) {
-        throw std::invalid_argument("source must be hold, test, reactive or nav");
+        throw std::invalid_argument("source must be hold, test, reactive, nav or managed");
     }
 }
 
@@ -140,7 +156,22 @@ void CommandGate::initialize_communication()
         "cmd_vel_guard_input",
         1
     );
-    if(command_source_ != "hold") {
+    if(managed_control_) {
+        lease_subscription_ = create_subscription<squad_interfaces::msg::ControlLease>(
+            "control_lease", 1, std::bind(&CommandGate::lease_callback, this, std::placeholders::_1)
+        );
+        nav_subscription_ = create_subscription<geometry_msgs::msg::Twist>(
+            "cmd_vel_nav", 1, [this](geometry_msgs::msg::Twist::ConstSharedPtr message) {
+                managed_command_callback(message, "nav");
+            }
+        );
+        reactive_subscription_ = create_subscription<geometry_msgs::msg::Twist>(
+            "cmd_vel_reactive", 1, [this](geometry_msgs::msg::Twist::ConstSharedPtr message) {
+                managed_command_callback(message, "reactive");
+            }
+        );
+    }
+    else if(command_source_ != "hold") {
         command_subscription_ = create_subscription<geometry_msgs::msg::Twist>(
             "cmd_vel_" + command_source_,
             1,
@@ -168,6 +199,38 @@ void CommandGate::command_callback(geometry_msgs::msg::Twist::ConstSharedPtr mes
     latest_command_ = *message;
     command_arrival_ = std::chrono::steady_clock::now();
     command_ros_time_ = now().seconds();
+}
+
+
+// Ignore every command whose source is not currently authorized:
+void CommandGate::managed_command_callback(
+    geometry_msgs::msg::Twist::ConstSharedPtr message, const std::string & source
+)
+{
+    if(source == command_source_ && lease_valid_) command_callback(message);
+}
+
+
+// A new lease generation invalidates cached velocities before any new source can move:
+void CommandGate::lease_callback(squad_interfaces::msg::ControlLease::ConstSharedPtr message)
+{
+    const bool supported = message->source == "hold" || message->source == "nav" ||
+        message->source == "reactive";
+    if(!supported || message->header.stamp.sec < 0 ||
+        message->header.stamp.nanosec >= NANOSECONDS_PER_SECOND) {
+        lease_valid_ = false;
+        command_valid_ = false;
+        return;
+    }
+    const double age = (now() - rclcpp::Time(message->header.stamp)).seconds();
+    lease_valid_ = age >= -0.05 && age < command_timeout_;
+    if(!lease_valid_) return;
+    if(generation_ != message->generation || command_source_ != message->source) {
+        command_valid_ = false;
+        generation_ = message->generation;
+        command_source_ = message->source;
+    }
+    lease_arrival_ = std::chrono::steady_clock::now();
 }
 
 
@@ -239,6 +302,10 @@ bool CommandGate::inputs_are_ready()
 {
     const auto wall_time = std::chrono::steady_clock::now();
     const double ros_time = now().seconds();
+    if(managed_control_) {
+        const double lease_age = std::chrono::duration<double>(wall_time - lease_arrival_).count();
+        if(!lease_valid_ || lease_age > command_timeout_) return false;
+    }
     if(command_source_ == "hold") return false;
     if(!command_valid_ || !scan_valid_) return false;
     if(ros_time <= 0.0) return false;

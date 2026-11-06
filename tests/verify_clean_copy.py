@@ -35,7 +35,11 @@ def copy_source_files(root: Path, destination: Path) -> list[str]:
         relative_path = Path(os.fsdecode(name))
         assert relative_path.parts[0] not in (*GENERATED_DIRECTORIES, '.git'), relative_path
         source = root / relative_path
-        assert source.is_file() and not source.is_symlink(), source
+        assert not source.is_symlink(), source
+        if not source.exists():
+            # Deleted tracked files are absent from the working-tree delivery.
+            continue
+        assert source.is_file(), source
         target = destination / relative_path
         target.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(source, target)
@@ -90,8 +94,8 @@ def verification_shell(dds_prefix: Path | None) -> str:
         *runtime_setup,
         'python3 tests/verify_runtime.py --mode baseline '
         '--output /tmp/search_squad_clean_baseline.json',
-        'python3 tests/verify_runtime.py --mode demo --robot explorer_2 '
-        '--output /tmp/search_squad_clean_demo_2.json',
+        'python3 tests/verify_runtime.py --mode reactive --robot explorer_2 '
+        '--output /tmp/search_squad_clean_reactive_2.json',
     ]
     return '\n'.join(commands) + '\n'
 

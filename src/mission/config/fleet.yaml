@@ -1,6 +1,8 @@
 # Initial poses are simulator spawn coordinates, not global TF estimates.
+# Face along world +X, with the scout 0.8 m ahead of the explorers.
 robots:
-  scout: {x: -5.0, y: 0.65, yaw: 0.0}
-  explorer_1: {x: -5.0, y: -0.65, yaw: 0.0}
-  explorer_2: {x: -4.2, y: -0.65, yaw: 0.0}
-demo_pose: {x: -3.0, y: 2.8, yaw: 1.57079632679}
+  scout: {x: -4.2, y: 0.0, yaw: 0.0}
+  explorer_1: {x: -5.0, y: 0.5, yaw: 0.0}
+  explorer_2: {x: -5.0, y: -0.5, yaw: 0.0}
+# Explicit obstacle fixture for tests; normal operation keeps the triangle.
+obstacle_test_pose: {x: -3.0, y: 2.8, yaw: 1.57079632679}

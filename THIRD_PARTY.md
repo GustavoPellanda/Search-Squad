@@ -14,7 +14,7 @@ Burger meshes are resolved from the declared binary dependency `turtlebot3_gazeb
 they are not copied, downloaded by the GUI, or obtained from another workspace.
 
 The timed drive, world, controller and command gate are original Search Squad code.
-No course package was copied. The old controller was consulted for C++ organization
+The earlier course workspace remains an independent reference. The old controller was consulted for C++ organization
 and LiDAR angular normalization; no source excerpt from it is incorporated.
 Nav2 Collision Monitor and Gazebo ROS are declared system dependencies, unmodified.
 
@@ -25,3 +25,15 @@ Original binary-package resource SHA-256 (before adaptation):
 
 `collision_monitor_runner` links the unmodified official Nav2 CollisionMonitor
 class. Its small main function is original; no upstream library source is copied.
+
+`src/indoor_navigation/config/nav2.yaml` adapts the author's classroom
+`nav2_integration` configuration, originally based on ROBOTIS
+`turtlebot3_navigation2/param/humble/burger.yaml` (Apache-2.0):
+https://github.com/ROBOTIS-GIT/turtlebot3/tree/humble/turtlebot3_navigation2/param/humble
+The independent copy uses project frames, sensor topics, conservative velocity
+limits, live map updates and room keepout filters. No course overlay is required.
+Nav2 servers and plugins remain unmodified system dependencies.
+The project-owned `LiveObstacleLayer` subclasses Nav2's `ObstacleLayer` and
+changes scan scheduling; it does not vendor or patch upstream library sources.
+Nav2's Regulated Pure Pursuit controller is also used as an installed plugin:
+https://github.com/ros-navigation/navigation2/tree/humble/nav2_regulated_pure_pursuit_controller

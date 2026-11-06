@@ -1,0 +1,16 @@
+string task_id
+geometry_msgs/PoseStamped approach
+geometry_msgs/PoseStamped threshold
+geometry_msgs/PoseStamped entry
+float64 doorway_width
+float64 exploration_timeout
+---
+string mapping_status
+string reason
+bool returned
+bool passage_clear
+---
+string phase
+string mapping_status
+uint32 frontier_count
+uint32 known_cells

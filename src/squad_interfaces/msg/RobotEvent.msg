@@ -1,0 +1,9 @@
+std_msgs/Header header
+string robot
+string task_id
+string phase
+string mapping_status
+string detail
+uint32 frontier_count
+uint32 known_cells
+bool returned

@@ -1,0 +1,5 @@
+<library path="live_obstacle_layer">
+  <class type="indoor_navigation::LiveObstacleLayer" base_class_type="nav2_costmap_2d::Layer">
+    <description>Standard Nav2 obstacle processing with bounded non-blocking scan-time TF checks.</description>
+  </class>
+</library>
