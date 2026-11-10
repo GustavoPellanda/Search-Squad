@@ -11,6 +11,7 @@ import time
 
 from ament_index_python.packages import get_package_prefix
 from geometry_msgs.msg import TransformStamped, Twist
+from nav_msgs.msg import Odometry
 import rclpy
 from rclpy.node import Node
 from rclpy.qos import DurabilityPolicy, QoSProfile, qos_profile_sensor_data
@@ -89,6 +90,9 @@ def make_scan(kind: str, nanoseconds: int) -> LaserScan:
         scan.angle_increment = math.nan
     elif kind == 'rear_blocked':
         scan.ranges[SCAN_RAYS // 2] = 0.30
+    elif kind == 'off_axis':
+        # Outside the reactive front sector, but inside the forward braking envelope:
+        scan.ranges[29] = 0.19
     elif kind in ('left_blocked', 'right_blocked', 'blocked'):
         scan.ranges = obstacle_ranges(scan, kind)
     return scan
@@ -114,6 +118,7 @@ class Fixture(Node):
             LaserScan, '/probe/scan', qos_profile_sensor_data
         )
         self._command_publisher = self.create_publisher(Twist, '/probe/cmd_vel_test', 1)
+        self._odom_publisher = self.create_publisher(Odometry, '/probe/odom', 1)
         self._tf_publisher = self.create_publisher(TFMessage, '/tf', 10)
         self._static_publisher = self.create_publisher(
             TFMessage,
@@ -155,6 +160,11 @@ class Fixture(Node):
         clock = Clock()
         clock.clock.sec, clock.clock.nanosec = divmod(nanoseconds, NANOSECONDS_PER_SECOND)
         self._clock_publisher.publish(clock)
+        odom = Odometry()
+        odom.header.stamp = clock.clock
+        odom.header.frame_id = 'probe/odom'
+        odom.child_frame_id = 'probe/base_footprint'
+        self._odom_publisher.publish(odom)
         if transforms:
             odom_to_base = make_transform('probe/odom', 'probe/base_footprint', nanoseconds)
             self._tf_publisher.publish(TFMessage(transforms=[odom_to_base]))

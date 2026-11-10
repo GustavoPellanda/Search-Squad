@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """Run one project-world room task and evaluate it using separate, ignored reference geometry."""
 import argparse
-from collections import deque
 import json
 import math
 import os
@@ -123,6 +122,61 @@ def coverage(grid: OccupancyGrid, reference: dict) -> dict:
             'definition': 'known reachable-floor reference cells, 0.12 m obstacle clearance'}
 
 
+def doorway_depth(point, assignment: dict) -> float:
+    """Measure the actual robot center against the commanded doorway half-plane."""
+    threshold = assignment['threshold']['pose']
+    orientation = threshold['orientation']
+    yaw = 2 * math.atan2(orientation['z'], orientation['w'])
+    return ((point[0] - threshold['position']['x']) * math.cos(yaw) +
+            (point[1] - threshold['position']['y']) * math.sin(yaw))
+
+
+def run_assignment(observer: Observer, assignment: dict, timeout: float,
+                   launch, cancel_at: str = '') -> dict:
+    """Cancel at an observed stage and independently verify the eventual physical exit."""
+    goal = ExploreRoom.Goal()
+    set_message_fields(goal, assignment)
+    handle = wait_future(observer, observer.action.send_goal_async(goal), 10)
+    assert handle.accepted, 'Room task rejected, including after previous release'
+    result_future = handle.get_result_async()
+    deadline = time.monotonic() + timeout
+    cancellation = None
+    cancel_depth = None
+    while not result_future.done():
+        rclpy.spin_once(observer, timeout_sec=0.1)
+        if launch.poll() is not None or time.monotonic() > deadline:
+            raise TimeoutError('Room task did not finish; inspect launch log')
+        phase_matches = observer.phase == cancel_at
+        depth = doorway_depth(observer.trajectory[-1], assignment)
+        if cancel_at == 'ENTERING':
+            # Cancel with the center already inside, before the entry goal completes:
+            phase_matches = phase_matches and depth > 0.05
+        if cancel_at and phase_matches and cancellation is None:
+            cancel_depth = depth
+            cancellation = handle.cancel_goal_async()
+    wrapped = result_future.result()
+    outcome = wrapped.result
+    result = {'mapping_status': outcome.mapping_status, 'reason': outcome.reason,
+              'returned': outcome.returned, 'passage_clear': outcome.passage_clear,
+              'action_status': wrapped.status, 'cancel_at': cancel_at,
+              'cancel_depth': cancel_depth}
+    if cancel_at:
+        assert cancellation is not None, 'Requested cancellation stage was never observed'
+        assert wait_future(observer, cancellation, 5).goals_canceling
+        assert wrapped.status == 5, result
+        expected = 'NOT_STARTED' if cancel_at in ('GOING_TO_ROOM', 'ENTERING') else 'PARTIAL'
+        assert outcome.mapping_status == expected, result
+    else:
+        assert wrapped.status == 4, result
+    assert outcome.returned and outcome.passage_clear, result
+    state = observer.state(observer.robot)
+    position = [state.pose.position.x, state.pose.position.y]
+    result['exit_position'] = position
+    result['exit_depth'] = doorway_depth(position, assignment)
+    assert result['exit_depth'] < -0.40, 'Action finished while the doorway was occupied'
+    return result
+
+
 def main() -> None:
     """Start one isolated headless fleet, submit the room action and verify the outcome."""
     parser = argparse.ArgumentParser()
@@ -133,6 +187,8 @@ def main() -> None:
     parser.add_argument('--timeout', type=float, default=900.0)
     parser.add_argument('--exploration-timeout', type=float)
     parser.add_argument('--expected', choices=['MAPPED', 'PARTIAL'], default='MAPPED')
+    parser.add_argument('--cancellations', action='store_true',
+                        help='Cancel approach, mid-entry, exploration and return in one fleet')
     args = parser.parse_args()
     os.environ.setdefault('RMW_IMPLEMENTATION', 'rmw_cyclonedds_cpp')
     os.environ.setdefault('ROS_DOMAIN_ID', '67')
@@ -163,23 +219,19 @@ def main() -> None:
             odom_subscribers = observer.get_subscriptions_info_by_topic('/' + args.robot + '/odom')
             assert any(endpoint.node_name == 'controller_server'
                        for endpoint in odom_subscribers), 'Nav2 controller lacks real odometry'
-            goal = ExploreRoom.Goal()
             assignment = yaml.safe_load(args.task.read_text())
             if args.exploration_timeout is not None:
                 assignment['exploration_timeout'] = args.exploration_timeout
-            set_message_fields(goal, assignment)
-            handle = wait_future(observer, observer.action.send_goal_async(goal), 10)
-            assert handle.accepted, 'Room task rejected'
-            result_future = handle.get_result_async()
-            deadline = time.monotonic() + args.timeout
-            while not result_future.done():
-                rclpy.spin_once(observer, timeout_sec=0.2)
-                if launch.poll() is not None or time.monotonic() > deadline:
-                    raise TimeoutError('Room task did not finish; inspect launch log')
-            outcome = result_future.result().result
-            report['outcome'] = {'mapping_status': outcome.mapping_status,
-                                 'reason': outcome.reason, 'returned': outcome.returned,
-                                 'passage_clear': outcome.passage_clear}
+            if args.cancellations:
+                report['cancellations'] = []
+                for phase in ('GOING_TO_ROOM', 'ENTERING', 'EXPLORING', 'RETURNING'):
+                    assignment['task_id'] = 'cancel_' + phase.lower()
+                    assignment['exploration_timeout'] = 12.0
+                    report['cancellations'].append(run_assignment(
+                        observer, assignment, args.timeout, launch, phase))
+                report['outcome'] = report['cancellations'][-1]
+            else:
+                report['outcome'] = run_assignment(observer, assignment, args.timeout, launch)
             report['events'] = observer.events
             report['map_known_at_entry'] = observer.map_at_entry
             report['map_known_at_end'] = sum(value >= 0 for value in observer.map.data)
@@ -202,10 +254,10 @@ def main() -> None:
                 delta = math.hypot(final[robot].pose.position.x - initial[robot].pose.position.x,
                                    final[robot].pose.position.y - initial[robot].pose.position.y)
                 assert delta < 0.01, robot + ' moved without selection'
-            assert outcome.mapping_status == args.expected, report['outcome']
-            assert outcome.returned and outcome.passage_clear, report['outcome']
+            if not args.cancellations:
+                assert report['outcome']['mapping_status'] == args.expected, report['outcome']
             assert report['minimum_center_clearance'] > 0.14, 'Robot contacted a static obstacle'
-            if args.expected == 'MAPPED':
+            if not args.cancellations and args.expected == 'MAPPED':
                 assert report['coverage']['known_fraction'] >= 0.95, report['coverage']
                 assert report['map_known_at_end'] > report['map_known_at_entry']
             report['result'] = 'passed'

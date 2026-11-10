@@ -1,0 +1,23 @@
+cmake_minimum_required(VERSION 3.8)
+project(lidar_safety)
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+add_compile_options(-Wall -Wextra -Wpedantic)
+find_package(ament_cmake REQUIRED)
+add_library(safety_evaluator SHARED src/safety_evaluator.cpp)
+target_include_directories(safety_evaluator PUBLIC
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+  $<INSTALL_INTERFACE:include>)
+install(TARGETS safety_evaluator EXPORT safety_evaluator_targets
+  LIBRARY DESTINATION lib ARCHIVE DESTINATION lib RUNTIME DESTINATION bin)
+install(DIRECTORY include/ DESTINATION include)
+install(DIRECTORY config DESTINATION share/${PROJECT_NAME})
+ament_export_targets(safety_evaluator_targets HAS_LIBRARY_TARGET)
+ament_export_include_directories(include)
+ament_export_libraries(safety_evaluator)
+if(BUILD_TESTING)
+  find_package(ament_cmake_gtest REQUIRED)
+  ament_add_gtest(test_safety_evaluator test/test_safety_evaluator.cpp)
+  target_link_libraries(test_safety_evaluator safety_evaluator)
+endif()
+ament_package()

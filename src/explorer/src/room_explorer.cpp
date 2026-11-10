@@ -16,6 +16,7 @@
 #include <sensor_msgs/msg/laser_scan.hpp>
 #include <std_msgs/msg/empty.hpp>
 #include <squad_interfaces/action/explore_room.hpp>
+#include <squad_interfaces/msg/control_lease.hpp>
 #include <squad_interfaces/msg/robot_event.hpp>
 #include <squad_interfaces/srv/set_control.hpp>
 #include <tf2_ros/buffer.h>
@@ -42,6 +43,8 @@ class RoomExplorer : public rclcpp::Node
     using NavHandle = rclcpp_action::ClientGoalHandle<Navigate>;
     enum class Stage { IDLE, CLAIM, APPROACH, ENTER, OBSERVE, CHECK_PATH, EXPLORE,
         RETURN, EXIT, REPORT, CANCEL_WAIT, FAULT };
+    static constexpr double SUPERVISOR_TIMEOUT_SECONDS = 0.8;
+    static constexpr double CONTROL_ACK_TIMEOUT_SECONDS = 3.0;
 
     rclcpp_action::GoalResponse receive_task(
         const rclcpp_action::GoalUUID &, std::shared_ptr<const Task::Goal> goal
@@ -50,6 +53,7 @@ class RoomExplorer : public rclcpp::Node
     void accept_task(const std::shared_ptr<TaskHandle> goal);
     void map_callback(nav_msgs::msg::OccupancyGrid::ConstSharedPtr message);
     void scan_callback(sensor_msgs::msg::LaserScan::ConstSharedPtr message);
+    void lease_callback(squad_interfaces::msg::ControlLease::ConstSharedPtr message);
     bool current_pose(geometry_msgs::msg::PoseStamped & pose);
     bool mode_ready(const std::string & mode);
     void mode_response(rclcpp::Client<squad_interfaces::srv::SetControl>::SharedFuture future);
@@ -65,6 +69,7 @@ class RoomExplorer : public rclcpp::Node
     void evaluate_room(const geometry_msgs::msg::PoseStamped & pose);
     void begin_return(const std::string & reason);
     void finish_task(bool passage_clear);
+    void complete_action(bool success);
     void transition(Stage stage, const std::string & detail);
     void publish_status();
     void publish_mask(const explorer::RoomAnalysis * analysis = nullptr);
@@ -117,8 +122,10 @@ class RoomExplorer : public rclcpp::Node
     double last_status_time_ = -1.0;
     double last_map_stamp_ = -1.0;
     bool scan_valid_ = false;
+    bool lease_valid_ = false;
     double scan_stamp_ = 0.0;
     std::chrono::steady_clock::time_point scan_arrival_{};
+    std::chrono::steady_clock::time_point lease_arrival_{};
     std::chrono::steady_clock::time_point stage_arrival_{};
     std::chrono::steady_clock::time_point mode_request_time_{};
     tf2_ros::Buffer buffer_;
@@ -129,6 +136,7 @@ class RoomExplorer : public rclcpp::Node
     rclcpp::Client<squad_interfaces::srv::SetControl>::SharedPtr mode_client_;
     rclcpp::Subscription<nav_msgs::msg::OccupancyGrid>::SharedPtr map_subscription_;
     rclcpp::Subscription<sensor_msgs::msg::LaserScan>::SharedPtr scan_subscription_;
+    rclcpp::Subscription<squad_interfaces::msg::ControlLease>::SharedPtr lease_subscription_;
     rclcpp::Publisher<nav_msgs::msg::OccupancyGrid>::SharedPtr mask_publisher_;
     rclcpp::Publisher<nav2_msgs::msg::CostmapFilterInfo>::SharedPtr filter_publisher_;
     rclcpp::Publisher<squad_interfaces::msg::RobotEvent>::SharedPtr event_publisher_;
@@ -167,6 +175,11 @@ RoomExplorer::RoomExplorer()
     scan_subscription_ = create_subscription<sensor_msgs::msg::LaserScan>(
         "scan", rclcpp::SensorDataQoS(),
         std::bind(&RoomExplorer::scan_callback, this, std::placeholders::_1)
+    );
+    lease_subscription_ = create_subscription<squad_interfaces::msg::ControlLease>(
+        "control_lease",
+        1,
+        std::bind(&RoomExplorer::lease_callback, this, std::placeholders::_1)
     );
     mask_publisher_ = create_publisher<nav_msgs::msg::OccupancyGrid>(
         "room_mask", rclcpp::QoS(1).reliable().transient_local()
@@ -308,13 +321,29 @@ void RoomExplorer::scan_callback(sensor_msgs::msg::LaserScan::ConstSharedPtr mes
 }
 
 
+// A task must also observe loss of its supervisor, independently of velocity gating:
+void RoomExplorer::lease_callback(squad_interfaces::msg::ControlLease::ConstSharedPtr message)
+{
+    const auto & stamp = message->header.stamp;
+    lease_valid_ = stamp.sec >= 0 && stamp.nanosec < 1000000000U;
+    if(lease_valid_) {
+        const double age = (now() - rclcpp::Time(stamp)).seconds();
+        lease_valid_ = age >= -0.1 && age < SUPERVISOR_TIMEOUT_SECONDS;
+    }
+    lease_arrival_ = std::chrono::steady_clock::now();
+}
+
+
 // Every task decision uses a recent map-frame robot pose:
 bool RoomExplorer::current_pose(geometry_msgs::msg::PoseStamped & pose)
 {
     try {
         const auto transform = buffer_.lookupTransform("map", robot_ + "/base_footprint",
             tf2::TimePointZero);
-        if((now() - rclcpp::Time(transform.header.stamp)).seconds() > 0.7) return false;
+        const double age = (now() - rclcpp::Time(transform.header.stamp)).seconds();
+        const auto & translation = transform.transform.translation;
+        if(age < -0.1 || age > 0.7 || !std::isfinite(translation.x) ||
+            !std::isfinite(translation.y)) return false;
         pose.header = transform.header;
         pose.pose.position.x = transform.transform.translation.x;
         pose.pose.position.y = transform.transform.translation.y;
@@ -334,6 +363,10 @@ bool RoomExplorer::mode_ready(const std::string & mode)
     const double age = std::chrono::duration<double>(
         std::chrono::steady_clock::now() - mode_request_time_
     ).count();
+    if(mode_pending_ && age > CONTROL_ACK_TIMEOUT_SECONDS) {
+        fault("CONTROL_ACK_TIMEOUT");
+        return false;
+    }
     if(!mode_pending_ && mode_client_->service_is_ready() && age > 0.25) {
         auto request = std::make_shared<squad_interfaces::srv::SetControl::Request>();
         request->mode = mode;
@@ -528,29 +561,34 @@ void RoomExplorer::begin_return(const std::string & reason)
 }
 
 
-// Report return and doorway clearance independently of the mapping outcome:
+// A physically clear return still requires the supervisor to acknowledge release:
 void RoomExplorer::finish_task(bool passage_clear)
+{
+    if(!task_) return;
+    if(!passage_clear) {
+        fault("EXIT_NOT_CONFIRMED");
+        return;
+    }
+    returned_ = true;
+    accepted_mode_.clear();
+    transition(Stage::REPORT, "Return verified; waiting for task release acknowledgement");
+    publish_status();
+}
+
+
+// Keep the physical return evidence separate from action success and owner release:
+void RoomExplorer::complete_action(bool success)
 {
     if(!task_) return;
     auto result = std::make_shared<Task::Result>();
     result->mapping_status = mapping_status_;
     result->reason = reason_;
-    returned_ = passage_clear;
-    result->returned = passage_clear;
-    result->passage_clear = passage_clear;
-    transition(passage_clear ? Stage::REPORT : Stage::FAULT,
-        passage_clear ? "Returned to corridor; passage clear" :
-        "Return failed; reservation retained");
-    publish_status();
+    result->returned = returned_;
+    result->passage_clear = returned_;
     if(task_->is_canceling()) task_->canceled(result);
-    else if(passage_clear) task_->succeed(result);
+    else if(success) task_->succeed(result);
     else task_->abort(result);
     task_.reset();
-    if(passage_clear) {
-        accepted_mode_.clear();
-        mode_ready("release");
-        transition(Stage::IDLE, "Available for another room task");
-    }
 }
 
 
@@ -563,19 +601,46 @@ void RoomExplorer::control_loop()
     }
     if(!task_ || stage_ == Stage::FAULT) return;
     heartbeat_publisher_->publish(std_msgs::msg::Empty());
+    const double lease_age = std::chrono::duration<double>(
+        std::chrono::steady_clock::now() - lease_arrival_).count();
+    const bool supervisor_ready = lease_valid_ && lease_age < SUPERVISOR_TIMEOUT_SECONDS;
+    if(stage_ != Stage::CLAIM && !supervisor_ready) {
+        fault("SUPERVISOR_LOST");
+        return;
+    }
+    if(stage_ == Stage::REPORT) {
+        if(mode_ready("release")) {
+            complete_action(true);
+            transition(Stage::IDLE, "Release acknowledged; available for another room task");
+        }
+        else if(std::chrono::duration<double>(std::chrono::steady_clock::now() -
+            stage_arrival_).count() > 5.0) {
+            fault("RELEASE_TIMEOUT");
+        }
+        return;
+    }
     geometry_msgs::msg::PoseStamped pose;
     const double scan_age = std::chrono::duration<double>(
         std::chrono::steady_clock::now() - scan_arrival_).count();
+    const double scan_stamp_age = now().seconds() - scan_stamp_;
+    const double map_stamp_age = map_ ?
+        (now() - rclcpp::Time(map_->header.stamp)).seconds() : -1.0;
     const bool ready = map_ && current_pose(pose) && scan_valid_ && scan_age < 0.8 &&
-        now().seconds() - scan_stamp_ < 0.8 &&
-        (now() - rclcpp::Time(map_->header.stamp)).seconds() < 1.2;
+        scan_stamp_age >= -0.1 && scan_stamp_age < 0.8 &&
+        map_stamp_age >= -0.1 && map_stamp_age < 1.2;
     if(stage_ == Stage::CLAIM) {
+        if(cancel_requested_) {
+            if(ready) transition(Stage::CANCEL_WAIT, "Canceled before approach; verifying clearance");
+            else fault("CANCELED_BEFORE_READINESS");
+            return;
+        }
         if(std::chrono::duration<double>(std::chrono::steady_clock::now() -
             stage_arrival_).count() > 45.0) {
             fault("READINESS_TIMEOUT");
             return;
         }
-        if(ready && nav_client_->action_server_is_ready() && mode_ready("task")) {
+        if(ready && supervisor_ready && nav_client_->action_server_is_ready() &&
+            mode_ready("task")) {
             publish_mask();
             navigate(assignment_.approach, Stage::APPROACH);
         }
@@ -661,7 +726,15 @@ void RoomExplorer::control_loop()
         }
         else if(mode_ready("hold")) {
             if(!entered_) {
-                finish_task(true);
+                if(doorway_depth(pose.pose.position) < -passage_clearance_) {
+                    finish_task(true);
+                }
+                else {
+                    // Entry cancellation may leave the body across the threshold:
+                    mask_active_ = false;
+                    publish_mask();
+                    navigate(exit_facing_pose(assignment_.approach), Stage::EXIT);
+                }
                 return;
             }
             navigate(exit_facing_pose(assignment_.entry), Stage::RETURN);
@@ -711,6 +784,7 @@ double RoomExplorer::doorway_depth(const geometry_msgs::msg::Point & point) cons
 // Fail closed without attempting a blind return; an occupied entrance stays reserved:
 void RoomExplorer::fault(const std::string & reason)
 {
+    if(!task_) return;
     ++planner_generation_;
     reason_ = reason;
     if(mapping_status_ != "MAPPED") mapping_status_ = entered_ ? "PARTIAL" : "NOT_STARTED";
@@ -719,7 +793,9 @@ void RoomExplorer::fault(const std::string & reason)
     auto request = std::make_shared<squad_interfaces::srv::SetControl::Request>();
     request->mode = "stop";
     if(mode_client_->service_is_ready()) mode_client_->async_send_request(request);
-    finish_task(false);
+    transition(Stage::FAULT, "Task stopped; reservation retained: " + reason);
+    publish_status();
+    complete_action(false);
 }
 
 

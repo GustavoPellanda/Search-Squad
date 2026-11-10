@@ -22,9 +22,14 @@ def configure(context: LaunchContext) -> list:
     )
     with open(config_path, encoding='utf-8') as stream:
         config = yaml.safe_load(stream)
+    safety_path = os.path.join(
+        get_package_share_directory('lidar_safety'), 'config', 'safety.yaml')
+    with open(safety_path, encoding='utf-8') as stream:
+        safety = yaml.safe_load(stream)
 
     gate_parameters = dict(
         config['command_gate'],
+        **safety,
         use_sim_time=True,
         source=source,
         scan_frame=robot + '/base_scan',
@@ -36,6 +41,16 @@ def configure(context: LaunchContext) -> list:
         base_frame_id=robot + '/base_footprint',
         odom_frame_id=robot + '/odom',
     )
+    # Reuse the evaluated Humble monitor as a final physical-footprint guard.
+    # Directional slowing and the latency/braking sweep run inside the command gate:
+    margin = config['monitor_margin']
+    if not 0.0 <= margin < safety['safety.stop_margin']:
+        raise ValueError('Monitor margin must be smaller than the braking-envelope margin')
+    front = safety['safety.footprint_front'] + margin
+    rear = safety['safety.footprint_rear'] + margin
+    side = safety['safety.footprint_half_width'] + margin
+    monitor_parameters['StopZone.points'] = [
+        front, side, front, -side, -rear, -side, -rear, side]
     command_gate = Node(
         package='navigation',
         executable='command_gate',

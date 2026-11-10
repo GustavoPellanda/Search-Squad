@@ -57,6 +57,7 @@ class NavigationSupervisor : public rclcpp::Node
     bool localization_ready();
     bool stopped() const;
     bool backend_pose_fresh() const;
+    void report_idle_activity();
     void report(const std::string & phase, const std::string & detail);
     void fail(const std::string & reason);
 
@@ -149,8 +150,15 @@ rclcpp_action::GoalResponse NavigationSupervisor::receive_goal(
     const double norm = q.x * q.x + q.y * q.y + q.z * q.z + q.w * q.w;
     const bool valid = goal->pose.header.frame_id == "map" && std::isfinite(p.x) &&
         std::isfinite(p.y) && std::isfinite(norm) && std::abs(norm - 1.0) < 0.05;
-    if(!valid || stage_ != Stage::IDLE || public_goal_ ||
-        !action_client_->action_server_is_ready() || !localization_ready()) {
+    std::string rejection;
+    if(!valid) rejection = "Expected a finite map-frame goal with a normalized orientation";
+    else if(stage_ != Stage::IDLE || public_goal_) {
+        rejection = "Navigation is busy; wait for the current goal and handover to finish";
+    }
+    else if(!action_client_->action_server_is_ready()) rejection = "Nav2 is not ready";
+    else if(!localization_ready()) rejection = "Localization is not ready";
+    if(!rejection.empty()) {
+        report("GOAL_REJECTED", rejection);
         return rclcpp_action::GoalResponse::REJECT;
     }
     return rclcpp_action::GoalResponse::ACCEPT_AND_EXECUTE;
@@ -322,7 +330,12 @@ void NavigationSupervisor::pose_goal_callback(
     geometry_msgs::msg::PoseStamped::ConstSharedPtr message
 )
 {
-    if(task_owned_ || stage_ != Stage::IDLE) return;
+    if(task_owned_ || stage_ != Stage::IDLE) {
+        report("GOAL_REJECTED", task_owned_ ?
+            "RViz goal ignored: task ownership or explicit hold is active" :
+            "RViz goal ignored: navigation is busy; wait for the current goal and handover");
+        return;
+    }
     Navigate::Goal goal;
     goal.pose = *message;
     public_client_->async_send_goal(goal);
@@ -454,12 +467,37 @@ void NavigationSupervisor::control_loop()
     }
     lease_.header.stamp = now();
     lease_publisher_->publish(lease_);
+    report_idle_activity();
+}
+
+
+// An idle action server can still authorize reactive motion; report the selected activity:
+void NavigationSupervisor::report_idle_activity()
+{
+    if(stage_ != Stage::IDLE || room_owned_) return;
+    std::string phase;
+    std::string detail;
+    if(lease_.source == "reactive" && lease_.reactive_mode == "roam") {
+        phase = "REACTIVE_NAVIGATION";
+        detail = "Autonomous obstacle-reactive navigation";
+    }
+    else if(!roam_on_idle_ && !task_owned_) {
+        phase = "WAITING_FOR_TASK";
+        detail = "Stationary; waiting for a room assignment";
+    }
+    else {
+        phase = "HOLD";
+        detail = task_owned_ ? "Stationary; autonomous roaming disabled" :
+            "Stationary; waiting for localization before reactive navigation";
+    }
+    if(phase != reported_phase_) report(phase, detail);
 }
 
 
 // Publish structured status separately from velocity commands:
 void NavigationSupervisor::report(const std::string & phase, const std::string & detail)
 {
+    reported_phase_ = phase;
     squad_interfaces::msg::RobotEvent event;
     event.header.stamp = now();
     event.robot = robot_;

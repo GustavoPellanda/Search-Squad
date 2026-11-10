@@ -1,0 +1,15 @@
+# Burger footprint in base_footprint, metres. These include the body and both wheels.
+# Parameters are fixed at startup; rebuild is not required to tune this YAML.
+safety.footprint_front: 0.11
+safety.footprint_rear: 0.12
+safety.footprint_half_width: 0.11
+safety.stop_margin: 0.04
+safety.slow_margin: 0.20
+safety.slowdown_ratio: 0.4
+# Conservative braking assumptions, below the simulated actuator's acceleration ramp.
+safety.linear_deceleration: 0.5
+safety.angular_deceleration: 1.0
+# Processing, communication and one control tick; actual sensor age is added at runtime.
+safety.latency: 0.10
+safety.prediction_step: 0.02
+safety.odom_timeout: 0.5

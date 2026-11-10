@@ -31,15 +31,10 @@ Visualization Manager:
       Name: TF
       Enabled: true
     - Class: rviz_default_plugins/Polygon
-      Name: Stop zone
+      Name: Physical footprint stop zone
       Enabled: true
       Topic:
         Value: /scout/stop_zone
-    - Class: rviz_default_plugins/Polygon
-      Name: Slow zone
-      Enabled: true
-      Topic:
-        Value: /scout/slow_zone
   Views:
     Current:
       Class: rviz_default_plugins/TopDownOrtho

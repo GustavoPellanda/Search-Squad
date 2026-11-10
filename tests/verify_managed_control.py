@@ -130,6 +130,15 @@ def main() -> None:
                      zero(gate) and zero(reactive))
         gate, reactive = fixture.phase(scans=False, seconds=1.2)
         record_check(checks, 'sensor loss stops both managed layers', zero(gate) and zero(reactive))
+        fixture.reactive_mode = 'roam'
+        fixture.generation += 1
+        gate, reactive = fixture.phase('off_axis')
+        record_check(checks, 'off-axis safety feedback keeps the reactive turn stable',
+                     bool(reactive) and all(abs(x) < 1e-6 and abs(turn) > 0.1
+                                            for x, turn in reactive))
+        gate, reactive = fixture.phase()
+        record_check(checks, 'reactive resumes forward motion after the safety probe clears',
+                     any(x > 0.1 for x, _ in reactive))
         report['result'] = 'passed'
     finally:
         stop_nodes(processes)

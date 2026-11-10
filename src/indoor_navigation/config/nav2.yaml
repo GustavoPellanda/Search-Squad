@@ -47,7 +47,8 @@ controller_server:
     min_x_velocity_threshold: 0.001
     min_y_velocity_threshold: 0.5
     min_theta_velocity_threshold: 0.001
-    failure_tolerance: 0.3
+    # A new LiDAR obstacle must allow the 1 Hz route replanner to run before aborting:
+    failure_tolerance: 2.0
     progress_checker_plugin: progress_checker
     goal_checker_plugins:
     - general_goal_checker
@@ -55,30 +56,38 @@ controller_server:
     controller_plugins:
     - FollowPath
     progress_checker:
-      plugin: nav2_controller::SimpleProgressChecker
+      # Slow protected turns still make progress even while the center stays fixed:
+      plugin: nav2_controller::PoseProgressChecker
       required_movement_radius: 0.08
+      required_movement_angle: 0.5
       movement_time_allowance: 20.0
     general_goal_checker:
       stateful: true
       plugin: nav2_controller::SimpleGoalChecker
-      xy_goal_tolerance: 0.12
+      # Keep this below the 0.10 m minimum lookahead: RPP uses the carrot distance
+      # to switch from route tracking to final-heading alignment in Humble.
+      xy_goal_tolerance: 0.06
       yaw_goal_tolerance: 0.25
     observation_goal_checker:
       plugin: nav2_controller::PositionGoalChecker
-      xy_goal_tolerance: 0.10
+      # Retain the viewpoint's clearance instead of stopping 10 cm short at a corner:
+      xy_goal_tolerance: 0.04
       stateful: true
     FollowPath:
       plugin: nav2_regulated_pure_pursuit_controller::RegulatedPurePursuitController
       desired_linear_vel: 0.14
       lookahead_dist: 0.25
-      min_lookahead_dist: 0.18
-      max_lookahead_dist: 0.35
+      min_lookahead_dist: 0.10
+      max_lookahead_dist: 0.25
       lookahead_time: 1.5
-      use_velocity_scaled_lookahead_dist: false
+      # Slow tight curves should follow nearby path cells instead of cutting the corner:
+      use_velocity_scaled_lookahead_dist: true
       rotate_to_heading_angular_vel: 0.55
       rotate_to_heading_min_angle: 0.6
       use_rotate_to_heading: true
-      max_angular_accel: 1.2
+      # Rim acceleration is 0.256 m/s^2, below the drive's 1.0 m/s^2 actuator ramp.
+      # Sufficient angular acceleration also avoids stalling in protected slow turns:
+      max_angular_accel: 3.2
       transform_tolerance: 0.1
       min_approach_linear_velocity: 0.06
       approach_velocity_scaling_dist: 0.35
@@ -87,7 +96,7 @@ controller_server:
       use_regulated_linear_velocity_scaling: true
       regulated_linear_scaling_min_radius: 0.6
       regulated_linear_scaling_min_speed: 0.06
-      # Collision Monitor already applies a separate near-obstacle speed reduction:
+      # lidar_safety already applies a separate near-obstacle speed reduction:
       use_cost_regulated_linear_velocity_scaling: false
       cost_scaling_dist: 0.4
       cost_scaling_gain: 1.0
@@ -112,7 +121,6 @@ local_costmap:
       plugins:
       - static_layer
       - obstacle_layer
-      - inflation_layer
       inflation_layer:
         plugin: nav2_costmap_2d::InflationLayer
         inflation_radius: 0.5
@@ -123,6 +131,7 @@ local_costmap:
         observation_sources: scan
         scan:
           topic: scan
+          inf_is_valid: true
           max_obstacle_height: 2.0
           clearing: true
           marking: true
@@ -143,6 +152,8 @@ local_costmap:
       footprint_padding: 0.01
       filters:
       - room_filter
+      # Inflate the combined map, including new room-mask edges, before planning:
+      - inflation_layer
       room_filter:
         plugin: nav2_costmap_2d::KeepoutFilter
         enabled: true
@@ -168,7 +179,6 @@ global_costmap:
       plugins:
       - static_layer
       - obstacle_layer
-      - inflation_layer
       obstacle_layer:
         plugin: indoor_navigation::LiveObstacleLayer
         enabled: true
@@ -176,6 +186,7 @@ global_costmap:
         scan:
           topic: scan
           max_obstacle_height: 2.0
+          inf_is_valid: true
           clearing: true
           marking: true
           data_type: LaserScan
@@ -197,6 +208,7 @@ global_costmap:
       footprint_padding: 0.01
       filters:
       - room_filter
+      - inflation_layer
       room_filter:
         plugin: nav2_costmap_2d::KeepoutFilter
         enabled: true

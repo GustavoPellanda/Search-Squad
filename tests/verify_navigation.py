@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Check public goal navigation, cancellation and reactive fallback in the project world."""
 import argparse
+from functools import partial
 import json
 import math
 import os
@@ -10,7 +11,7 @@ import subprocess
 import time
 
 from gazebo_msgs.msg import ModelStates
-from geometry_msgs.msg import PoseStamped
+from geometry_msgs.msg import Twist
 from nav_msgs.msg import OccupancyGrid, Odometry, Path as NavPath
 from nav2_msgs.action import NavigateToPose
 import rclpy
@@ -34,6 +35,9 @@ class NavigationObserver(Node):
         self.speed = 1.0
         self.paths = []
         self.trajectory = []
+        self.commands = {}
+        self.motion_trace = []
+        self.last_trace_time = 0.0
         self.action = ActionClient(self, NavigateToPose, '/explorer_1/navigate_to_pose')
         self.control = self.create_client(SetControl, '/explorer_1/set_control')
         self._subscriptions_owned = [
@@ -47,6 +51,13 @@ class NavigationObserver(Node):
             self.create_subscription(ModelStates, '/simulation/model_states',
                                      self.states_callback, 10),
         ]
+        for topic in ('cmd_vel_nav', 'cmd_vel_guard_input', 'cmd_vel'):
+            self._subscriptions_owned.append(self.create_subscription(
+                Twist, '/explorer_1/' + topic, partial(self.command_callback, topic), 10))
+
+    def command_callback(self, topic: str, message: Twist) -> None:
+        """Distinguish controller output, gate forwarding and final protected commands."""
+        self.commands[topic] = [message.linear.x, message.angular.z]
 
     def map_callback(self, message: OccupancyGrid) -> None:
         """Wait for observed geometry rather than an initially empty publication."""
@@ -70,6 +81,13 @@ class NavigationObserver(Node):
         if 'explorer_1' in message.name:
             pose = message.pose[message.name.index('explorer_1')]
             self.trajectory.append((pose.position.x, pose.position.y))
+            if time.monotonic() - self.last_trace_time > 1.0:
+                self.last_trace_time = time.monotonic()
+                self.motion_trace.append({'position': self.trajectory[-1],
+                                          'yaw': 2 * math.atan2(pose.orientation.z,
+                                                                pose.orientation.w),
+                                          'source': self.source, 'speed': self.speed,
+                                          'commands': self.commands.copy()})
 
     def wait(self, predicate, timeout: float) -> None:
         """Keep collecting feedback until a condition or its wall deadline is reached."""
@@ -101,8 +119,12 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument('--output', type=Path, default=Path('/tmp/search_squad_navigation.json'))
     parser.add_argument('--test-map', default='')
+    parser.add_argument('--room-passages', action='store_true',
+                        help='Also traverse the narrow passages behind room furniture')
     parser.add_argument('--reference', type=Path, default=Path('artifacts/scenario/reference.yaml'))
     args = parser.parse_args()
+    if args.room_passages and not args.test_map:
+        parser.error('--room-passages requires the independently generated --test-map')
     for name, value in {'RMW_IMPLEMENTATION': 'rmw_cyclonedds_cpp', 'ROS_DOMAIN_ID': '71',
                         'GAZEBO_MASTER_URI': 'http://127.0.0.1:11471',
                         'ROS_LOG_DIR': '/tmp/search_squad_navigation_ros_logs',
@@ -129,6 +151,8 @@ def main() -> None:
             if args.test_map:
                 # This route's direct chord crosses the north-west room's screen:
                 goals.extend([(-3.2, 3.1), (-5.15, 3.1)])
+                if args.room_passages:
+                    goals.extend([(-3.95, 4.5), (-2.85, 4.55), (-0.55, 4.55), (-0.55, 3.3)])
             for x, y in goals:
                 handle = observer.send(x, y)
                 result = observer.future(handle.get_result_async(), 150)
@@ -171,6 +195,9 @@ def main() -> None:
         report['error'] = str(error)
         raise
     finally:
+        report['plans'] = observer.paths
+        report['trajectory'] = observer.trajectory
+        report['motion_trace'] = observer.motion_trace
         if launch is not None and launch.poll() is None:
             os.kill(launch.pid, signal.SIGINT)
             try:
@@ -186,7 +213,7 @@ def main() -> None:
                 report['result'] = 'failed'
         args.output.write_text(json.dumps(report, indent=2) + '\n')
         print(json.dumps({key: value for key, value in report.items()
-                          if key not in ('plans', 'trajectory')}, indent=2))
+                          if key not in ('plans', 'trajectory', 'motion_trace')}, indent=2))
         observer.destroy_node()
         rclpy.shutdown()
     if report['result'] != 'passed':

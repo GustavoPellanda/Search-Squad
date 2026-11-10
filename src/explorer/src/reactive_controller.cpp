@@ -12,6 +12,7 @@
 #include <rclcpp/rclcpp.hpp>
 #include <sensor_msgs/msg/laser_scan.hpp>
 #include <squad_interfaces/msg/control_lease.hpp>
+#include <squad_interfaces/msg/safety_state.hpp>
 
 /*
 Permanent LiDAR obstacle response. Roaming, scanning and managed holds produce
@@ -34,6 +35,7 @@ class ReactiveController : public rclcpp::Node
     bool is_scan_metadata_valid(const sensor_msgs::msg::LaserScan & scan) const;
     bool update_sector_clearances(const sensor_msgs::msg::LaserScan & scan);
     void lease_callback(squad_interfaces::msg::ControlLease::ConstSharedPtr message);
+    void safety_callback(squad_interfaces::msg::SafetyState::ConstSharedPtr message);
     void control_loop();
     bool scan_is_fresh(double ros_time) const;
     geometry_msgs::msg::Twist calculate_velocity();
@@ -76,6 +78,9 @@ class ReactiveController : public rclcpp::Node
     MotionState motion_state_ = MotionState::FORWARD;
     double turn_direction_ = 1.0;
     std::string reported_state_;
+    bool forward_blocked_ = false;
+    std::chrono::steady_clock::time_point safety_arrival_{};
+    rclcpp::Subscription<squad_interfaces::msg::SafetyState>::SharedPtr safety_subscription_;
 
     rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr command_publisher_;
     rclcpp::Subscription<sensor_msgs::msg::LaserScan>::SharedPtr scan_subscription_;
@@ -145,6 +150,9 @@ void ReactiveController::initialize_communication()
         "control_lease", 1,
         std::bind(&ReactiveController::lease_callback, this, std::placeholders::_1)
     );
+    safety_subscription_ = create_subscription<squad_interfaces::msg::SafetyState>(
+        "safety_state", rclcpp::QoS(1).reliable().transient_local(),
+        std::bind(&ReactiveController::safety_callback, this, std::placeholders::_1));
     control_timer_ = create_wall_timer(
         CONTROL_PERIOD,
         std::bind(&ReactiveController::control_loop, this)
@@ -258,6 +266,20 @@ void ReactiveController::lease_callback(
 }
 
 
+// A braking-envelope intervention can request a turn before the front-sector threshold:
+void ReactiveController::safety_callback(squad_interfaces::msg::SafetyState::ConstSharedPtr message)
+{
+    // The gate also tests forward motion while we turn. Keep turning until that
+    // probe clears; a safe turn alone must not release a blocked forward request:
+    const auto & stamp = message->header.stamp;
+    if(stamp.sec < 0 || stamp.nanosec >= NANOSECONDS_PER_SECOND) return;
+    const double age = (now() - rclcpp::Time(stamp)).seconds();
+    if(age < -0.05 || age > 0.5) return;
+    forward_blocked_ = message->source == "reactive" && !message->forward_allowed;
+    safety_arrival_ = std::chrono::steady_clock::now();
+}
+
+
 // Sensor loss and expired supervision produce zero; scanning and roaming share protection:
 void ReactiveController::control_loop()
 {
@@ -303,11 +325,15 @@ bool ReactiveController::scan_is_fresh(double ros_time) const
 // Keep a chosen turn until the front clears; otherwise scale forward speed by clearance:
 geometry_msgs::msg::Twist ReactiveController::calculate_velocity()
 {
-    if(motion_state_ == MotionState::FORWARD && front_clearance_ <= stop_distance_) {
+    const bool safety_blocked = forward_blocked_ && std::chrono::duration<double>(
+        std::chrono::steady_clock::now() - safety_arrival_).count() < 0.5;
+    if(motion_state_ == MotionState::FORWARD &&
+        (front_clearance_ <= stop_distance_ || safety_blocked)) {
         motion_state_ = MotionState::TURNING;
         turn_direction_ = left_clearance_ >= right_clearance_ ? 1.0 : -1.0;
     }
-    if(motion_state_ == MotionState::TURNING && front_clearance_ >= release_distance_) {
+    if(motion_state_ == MotionState::TURNING && front_clearance_ >= release_distance_ &&
+        !safety_blocked) {
         motion_state_ = MotionState::FORWARD;
     }
 

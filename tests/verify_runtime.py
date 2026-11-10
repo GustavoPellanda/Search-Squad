@@ -430,14 +430,12 @@ def verify_protection(
         'Collision Monitor slowdown not observed',
     )
     require(outputs[-1].message.linear.x == 0, 'Collision Monitor stop not observed')
-    require(
-        observer.latest(robot, 'cmd_vel_guard_input').linear.x > 0.10,
-        'Gate should still request forward motion for monitor stop proof',
-    )
+    require(observer.latest(robot, 'cmd_vel_guard_input').linear.x == 0.0,
+            'The braking-envelope gate did not stop its continuing forward request')
     speed = observer.latest(robot, 'odom').twist.twist.linear.x
     require(abs(speed) < 0.01, 'Robot did not physically stop at obstacle')
     report['collision_protection'] = (
-        'raw/gate 0.12 m/s, final slowdown and zero, measured stop before obstacle'
+        'raw 0.12 m/s, safety gate slowdown/zero, final zero, measured stop before obstacle'
     )
     command.linear.x = 0.0
     observer.wait(0.5, publish_command)
