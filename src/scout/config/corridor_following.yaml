@@ -1,0 +1,4 @@
+/**:
+  ros__parameters:
+    # Initial corridor policy: straight advance, no lateral/heading correction yet.
+    linear_speed: 0.08

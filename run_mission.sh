@@ -38,5 +38,5 @@ exec env -i \
             exit 1
         fi
 
-        exec ros2 launch mission fleet.launch.py mode:=room "$@"
+        exec ros2 launch mission fleet.launch.py "$@"
     ' search-squad-mission "$project_root" "$@"

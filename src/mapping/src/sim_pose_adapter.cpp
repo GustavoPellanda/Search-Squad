@@ -106,7 +106,7 @@ bool SimPoseAdapter::encoder_tree_ready(std::size_t index) const
 }
 
 
-// Compute map->odom from world pose and encoder TF at the same observation time:
+// Cache a successful Gazebo response until its matching encoder transform is available:
 void SimPoseAdapter::receive_pose(
     rclcpp::Client<gazebo_msgs::srv::GetEntityState>::SharedFuture future,
     std::size_t index
@@ -123,12 +123,15 @@ bool SimPoseAdapter::publish_pose(std::size_t index)
 {
     const auto response = responses_[index];
     try {
+        // Match encoder odometry to the Gazebo sample instead of using the latest TF:
         const auto odom = buffer_.lookupTransform(
             robots_[index] + "/odom", robots_[index] + "/base_footprint",
             rclcpp::Time(response->header.stamp)
         );
         tf2::Transform odom_from_base;
         tf2::fromMsg(odom.transform, odom_from_base);
+
+        // Project the measured world pose onto the planar map used by navigation:
         const auto & pose = response->state.pose;
         const auto & q = pose.orientation;
         const double yaw = std::atan2(
@@ -139,6 +142,8 @@ bool SimPoseAdapter::publish_pose(std::size_t index)
         const tf2::Transform map_from_base(
             rotation, tf2::Vector3(pose.position.x, pose.position.y, 0.0)
         );
+
+        // map<-odom = map<-base * inverse(odom<-base); encoder TF keeps its authority:
         geometry_msgs::msg::TransformStamped transform;
         transform.header.frame_id = "map";
         transform.header.stamp = response->header.stamp;

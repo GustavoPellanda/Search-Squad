@@ -194,9 +194,9 @@ void CommandGate::validate_parameters() const
     const bool known_source =
         command_source_ == "hold" || command_source_ == "test" ||
         command_source_ == "reactive" || command_source_ == "nav" ||
-        command_source_ == "managed";
+        command_source_ == "managed" || command_source_ == "corridor";
     if(!known_source) {
-        throw std::invalid_argument("source must be hold, test, reactive, nav or managed");
+        throw std::invalid_argument("source must be hold, test, reactive, nav, managed or corridor");
     }
 }
 

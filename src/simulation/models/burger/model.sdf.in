@@ -307,6 +307,13 @@
           </sphere>
         </geometry>
         <surface>
+          <!-- A fixed sphere represents a passive caster, not a third braked wheel. -->
+          <friction>
+            <ode>
+              <mu>0.0</mu>
+              <mu2>0.0</mu2>
+            </ode>
+          </friction>
           <contact>
             <ode>
               <soft_cfm>0</soft_cfm>

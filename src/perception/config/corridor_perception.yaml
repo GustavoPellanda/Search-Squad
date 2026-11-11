@@ -1,0 +1,25 @@
+/**:
+  ros__parameters:
+    # Distances are metres, angles radians and times seconds.
+    # Reject old acquisition times or missing new packets after this interval:
+    scan_timeout: 0.3
+
+    # Split adjacent returns at physical gaps; fit each run with perpendicular error:
+    point_gap: 0.22
+    max_residual: 0.035
+    min_segment_length: 0.35
+    min_segment_points: 6
+    # Keep longitudinal support near the tracked structural walls, not room back walls:
+    max_heading_difference: 0.20
+    wall_association_distance: 0.18
+    # Accept measured corridor widths within this interval; no nominal width is supplied:
+    min_width: 0.7
+    max_width: 4.0
+    # Gaps between measured wall fragments remain candidates for later interpretation:
+    min_opening_width: 0.6
+    max_opening_width: 2.0
+    # Both limits apply from the missing wall's last real observation:
+    prediction_time: 20.0
+    prediction_distance: 1.5
+    # Enlarge the shared footprint band only for the reported frontal clearance:
+    front_band_margin: 0.08

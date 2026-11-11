@@ -9,6 +9,8 @@
   <exec_depend>simulation</exec_depend>
   <exec_depend>navigation</exec_depend>
   <exec_depend>explorer</exec_depend>
+  <exec_depend>scout</exec_depend>
+  <exec_depend>perception</exec_depend>
   <exec_depend>rviz2</exec_depend>
   <exec_depend>rmw_cyclonedds_cpp</exec_depend>
   <exec_depend>ament_index_python</exec_depend>
