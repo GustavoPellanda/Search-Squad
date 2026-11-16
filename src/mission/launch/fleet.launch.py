@@ -4,7 +4,9 @@ All modes spawn and protect the three robots. Hold keeps the selected command
 source fixed; reactive starts standalone roaming. Navigation and room add live
 mapping and a supervisor that owns command selection. Navigation roams when idle;
 room waits for an assignment. The other robots keep their hold command source.
-The default starts Scout perception and forward requests through the existing protection.
+The default starts fuzzy Scout corridor following and Scout-only SLAM together.
+The auto backend selects SLAM for Scout and assisted mapping for the other
+legacy profiles. SLAM can also run in hold mode with protected external teleop.
 """
 import json
 import os
@@ -42,6 +44,9 @@ def compose(context: LaunchContext) -> list:
     if robot == 'auto':
         robot = 'scout' if mode == 'scout' else 'explorer_1'
     source = LaunchConfiguration('source').perform(context)
+    mapping_backend = LaunchConfiguration('mapping_backend').perform(context)
+    if mapping_backend == 'auto':
+        mapping_backend = 'scout_slam' if mode == 'scout' else 'assisted'
     gui = LaunchConfiguration('gui').perform(context)
     rviz_enabled = LaunchConfiguration('rviz').perform(context) == 'true'
     terminal_enabled = LaunchConfiguration('log_terminal').perform(context) == 'true'
@@ -49,6 +54,16 @@ def compose(context: LaunchContext) -> list:
     task_file = LaunchConfiguration('task_file').perform(context)
     test_map = LaunchConfiguration('test_map').perform(context)
     log_file = LaunchConfiguration('log_file').perform(context)
+
+    # SLAM owns map and map->scout/odom; reject mixed authorities before spawning anything.
+    # Explorers keep local odometry only, so global navigation is unavailable in this profile:
+    if mapping_backend == 'scout_slam':
+        if robot != 'scout' or mode not in ('hold', 'scout'):
+            raise ValueError('scout_slam requires robot:=scout and mode:=hold|scout')
+        if mode == 'hold' and source not in ('hold', 'test'):
+            raise ValueError('SLAM teleop requires source:=hold|test')
+        if obstacle_test_pose or test_map or task_file:
+            raise ValueError('scout_slam uses the normal spawn and accepts no test_map/task_file')
 
     # A saved map is test input for navigation, never room-exploration knowledge:
     if test_map and mode != 'navigation':
@@ -76,11 +91,17 @@ def compose(context: LaunchContext) -> list:
     actions = [include('simulation', 'world.launch.py', gui=gui)]
     actions.extend(create_robot_actions(fleet, robot, source, obstacle_test_pose))
 
+    # Only the SLAM backend connects Scout to map; the assisted nodes are absent here:
+    if mapping_backend == 'scout_slam':
+        actions.append(include('shared_mapping', 'scout_slam.launch.py'))
+
     # Mapping and supervised Nav2 are shared by navigation and room profiles:
     if managed_navigation:
         actions.extend(create_managed_navigation_actions(robot, mode, test_map))
     if mode == 'scout':
-        actions.extend(create_mapping_actions())
+        # Start exactly one map authority. Local fuzzy geometry still uses encoder odom:
+        if mapping_backend == 'assisted':
+            actions.extend(create_mapping_actions())
         actions.append(include(
             'scout', 'scout.launch.py', robot=robot,
             autostart=LaunchConfiguration('scout_autostart').perform(context),
@@ -95,7 +116,7 @@ def compose(context: LaunchContext) -> list:
 
     actions.extend(create_logging_actions(log_file, terminal_enabled))
     if rviz_enabled:
-        actions.append(create_rviz_node(robot, mission_share, mode))
+        actions.append(create_rviz_node(robot, mission_share, mode, mapping_backend))
     if task_file:
         if mode != 'room':
             raise ValueError('task_file requires mode:=room')
@@ -222,10 +243,14 @@ def status_terminal(event, _context: LaunchContext, log_file: str) -> list:
     return [viewer]
 
 
-def create_rviz_node(robot: str, mission_share: str, mode: str) -> Node:
+def create_rviz_node(
+    robot: str, mission_share: str, mode: str, mapping_backend: str = 'assisted'
+) -> Node:
     """Select the map or odometry view and route goals and overlays to the selected robot."""
     view = robot + '.rviz'
-    if mode in ('navigation', 'room'):
+    if mapping_backend == 'scout_slam' and mode == 'hold':
+        view = 'scout_slam.rviz'
+    elif mode in ('navigation', 'room'):
         view = 'navigation.rviz'
     elif mode == 'scout':
         view = 'corridor.rviz'
@@ -274,6 +299,12 @@ def generate_launch_description() -> LaunchDescription:
             default_value='auto',
             choices=['auto', 'scout', 'explorer_1', 'explorer_2'],
             description='Auto selects Scout in scout mode and explorer_1 in other profiles.',
+        ),
+        DeclareLaunchArgument(
+            'mapping_backend',
+            default_value='auto',
+            choices=['auto', 'assisted', 'scout_slam'],
+            description='Auto uses Scout SLAM in scout mode; other profiles retain assisted mapping.',
         ),
         DeclareLaunchArgument(
             'source',

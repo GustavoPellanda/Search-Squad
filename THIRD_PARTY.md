@@ -37,3 +37,13 @@ The project-owned `LiveObstacleLayer` subclasses Nav2's `ObstacleLayer` and
 changes scan scheduling; it does not vendor or patch upstream library sources.
 Nav2's Regulated Pure Pursuit controller is also used as an installed plugin:
 https://github.com/ros-navigation/navigation2/tree/humble/nav2_regulated_pure_pursuit_controller
+
+`shared_mapping` launches the unmodified installed SLAM Toolbox Humble executable
+(`async_slam_toolbox_node`). Its parameter file adapts the upstream Humble example:
+https://github.com/SteveMacenski/slam_toolbox/blob/humble/config/mapper_params_online_async.yaml
+SLAM Toolbox is maintained by Steve Macenski and contributors; the installed
+2.6.10 package declares LGPL. Upstream files retain their own license notices:
+https://github.com/SteveMacenski/slam_toolbox/tree/humble
+No SLAM implementation is copied or patched. Project configuration sets Scout
+frames, simulation time, sensor range, map update rate and motion thresholds.
+Nav2 map saving and ROS 2 teleop_twist_keyboard are unmodified installed tools.

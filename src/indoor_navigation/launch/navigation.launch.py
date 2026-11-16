@@ -90,11 +90,15 @@ def load_navigation_parameters(robot: str, test_map: str) -> dict:
         navigation_share, 'behavior_trees', 'navigate_pose.xml'
     )
 
-    # A test map feeds only Nav2 costmaps; live mapping continues publishing /map:
+    # Both explorers consume the same absolute structural-map topic, regardless
+    # of their private Nav2 namespaces. No per-robot map or costmap is a substitute.
+    # The explicit saved-map diagnostic is the only exception; it cannot run in room mode:
+    map_topic = '/navigation_test_map' if test_map else '/map'
+    for costmap in ('global_costmap', 'local_costmap'):
+        costmap_parameters = parameters[costmap][costmap]['ros__parameters']
+        costmap_parameters['static_layer']['map_topic'] = map_topic
+
     if test_map:
-        for costmap in ('global_costmap', 'local_costmap'):
-            costmap_parameters = parameters[costmap][costmap]['ros__parameters']
-            costmap_parameters['static_layer']['map_topic'] = '/navigation_test_map'
         parameters['map_server'] = {'ros__parameters': {
             'use_sim_time': True,
             'yaml_filename': test_map,

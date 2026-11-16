@@ -5,11 +5,19 @@
 
 # System overview:
 
+Every robot in the squad has a base anti-colison system, to prevent them from crashing into walls or obstacles. Using their Lidar sensors, they will stop if they're too close from an object in front of them. {Package: Lidar Safety}
+
+The execution of the mission starts with the Scout. This robot will have to navigate through an unknown environment, and uses a fuzzy control system to do so. The scout percieves the environment through it's lidar sensors. 
 
 
-# Perception node:
 
-### corridor_perception.cpp
+# Lidar Safety package:
+
+
+
+# Perception package:
+
+### corridor_perception.cpp node:
 
 - Subscribes to `/scout/scan` (`sensor_msgs/msg/LaserScan`).
 - Receives transforms through the TF listener on `/tf` and `/tf_static`, and simulation time from `/clock`.
@@ -25,7 +33,7 @@ The angle and distance are converted by `project_scan_to_odom()` into `(x, y)` c
 - Publishes measurements to `/scout/corridor_observation` (`squad_interfaces/msg/CorridorObservation`).
 - Publishes RViz markers to `/scout/corridor_markers` (`visualization_msgs/msg/MarkerArray`).
 
-### corridor_geometry.cpp
+### corridor_geometry.cpp node:
 
 This file implements a geometry library used by `corridor_perception`, not another ROS node. It has no subscriptions or publishers.
 
@@ -51,8 +59,8 @@ Door openings: `find_openings()` marks gaps between 0.60 and 2.00 m between meas
 Back wall: `terminal_wall_evidence()` looks for approximately perpendicular segments ahead of the robot. If aligned fragments cover more than 75% of the valid corridor width, they are marked as a back-wall candidate. This does not yet make the Scout stop or turn.
 
 
-# Scout node:
+# Scout Package:
 
-### corridor_follower.cpp
+### corridor_follower.cpp node:
 
-### fuzzy_steering.cpp
+### fuzzy_steering.cpp node:

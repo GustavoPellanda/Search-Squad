@@ -39,3 +39,17 @@ This scenario is intended to validate the main components of the system: corrido
 
 The long-term goal is to extend the system to more complex environments, with multiple interconnected corridors, several Scouts, and a larger fleet of Explorers.
 Ideally, the robots would distribute themselves throughout the environment, dynamically receiving new assignments and cooperating to explore and map the entire area as efficiently as possible.
+
+# Technical Specifications
+
+The project is developed on **Ubuntu 22.04**, using **ROS 2 Humble** to organize the robot behaviors and communication between components. The main technologies used are:
+
+- **C++17:** Implementation of perception, motion control, mapping, and coordination nodes.
+- **Python and YAML:** Launch files and configuration of the robots and their behaviors.
+- **Gazebo Classic 11:** Simulation of the indoor environment and three TurtleBot3 Burger robots, including their LiDAR sensors and differential-drive motion.
+- **Nav2:** Path planning, path following, and collision monitoring.
+- **SLAM Toolbox:** LiDAR-based mapping and localization in the separate Scout SLAM profile.
+- **TF2:** Management of coordinate transformations between robot, sensor, odometry, and map reference frames.
+- **RViz2:** Visualization of maps, sensor readings, robot poses, and navigation information.
+- **Cyclone DDS:** Communication middleware used by ROS 2.
+- **colcon and ament_cmake:** Build tools for the ROS 2 workspace and its packages.

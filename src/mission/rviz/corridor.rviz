@@ -13,7 +13,7 @@ Visualization Manager:
       Enabled: true
       Cell Size: 1
     - Class: rviz_default_plugins/Map
-      Name: Shared LiDAR map
+      Name: Shared structural map
       Enabled: true
       Topic:
         Value: /map
