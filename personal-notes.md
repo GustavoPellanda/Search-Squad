@@ -2,22 +2,27 @@
 
 - A navegação do scout ainda não considera curvas. Se der tempo, eu tenho que fazer algum sistema para diferenciar um buraco de porta de uma curva no corredor e fazer o robô virar quando encontrar uma parede de fundo. Por enquanto, também não tem nada para o caso de ter obstáculos ou bifurcações no corredor.
 
+- Fica legal criar uma central de resultados no do final da missão e colocar umas coisas visuais para fazer análises. Fica legal colocar um comparativo dos mapas feitos por cada robô individualmente com sobreposição ao ground truth do Gazebo com o mapa compartilhado. Que sabe as rotas que cada robô fez também. Pensar se tem mais alguma coisa
 
 # System overview:
 
 Every robot in the squad has a base anti-colison system, to prevent them from crashing into walls or obstacles. Using their Lidar sensors, they will stop if they're too close from an object in front of them. {Package: Lidar Safety}
 
-The execution of the mission starts with the Scout. This robot will have to navigate through an unknown environment, and uses a fuzzy control system to do so. The scout percieves the environment through it's lidar sensors. 
+The execution of the mission starts with the Scout. This robot will have to navigate through an unknown environment, and uses a fuzzy control system to do so. The scout percieves the environment through it's lidar sensors. The points read by the sensors are used by a perception node to form straight lines, that can be interpreted as walls. Parelel walls, in a small distance from each other, make up a corridor. {Package: Perception}
 
+A Fuzzy control system uses the detected walls to guide the Scout throgh corridors. Considering the distance between walls, how well centered the robot is and if it points in the same direction as the corridor, the fuzzy sistem makes the robot turn left or right. It also detects a back wall at the end of the corridor (explain how) and stops it when the corridor ends. {Package: Scout}
+
+The scout creates a map... (finish)
 
 
 # Lidar Safety package:
 
+### lidar_safety node:
 
 
 # Perception package:
 
-### corridor_perception.cpp node:
+### corridor_perception node:
 
 - Subscribes to `/scout/scan` (`sensor_msgs/msg/LaserScan`).
 - Receives transforms through the TF listener on `/tf` and `/tf_static`, and simulation time from `/clock`.
@@ -33,7 +38,7 @@ The angle and distance are converted by `project_scan_to_odom()` into `(x, y)` c
 - Publishes measurements to `/scout/corridor_observation` (`squad_interfaces/msg/CorridorObservation`).
 - Publishes RViz markers to `/scout/corridor_markers` (`visualization_msgs/msg/MarkerArray`).
 
-### corridor_geometry.cpp node:
+### corridor_geometry node:
 
 This file implements a geometry library used by `corridor_perception`, not another ROS node. It has no subscriptions or publishers.
 
@@ -61,6 +66,6 @@ Back wall: `terminal_wall_evidence()` looks for approximately perpendicular segm
 
 # Scout Package:
 
-### corridor_follower.cpp node:
+### corridor_follower node:
 
-### fuzzy_steering.cpp node:
+### fuzzy_steering node:

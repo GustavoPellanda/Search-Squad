@@ -2,10 +2,19 @@
 <package format="3">
   <name>shared_mapping</name>
   <version>0.1.0</version>
-  <description>Scout SLAM integration with explicit shared map and TF authority.</description>
+  <description>Parallel individual SLAM, measured initial alignment and shared structural map.</description>
   <maintainer email="gusfipe@gmail.com">Gustavo Pellanda</maintainer>
   <license>Apache-2.0</license>
   <buildtool_depend>ament_cmake</buildtool_depend>
+  <depend>rclcpp</depend>
+  <depend>gazebo_msgs</depend>
+  <depend>sensor_msgs</depend>
+  <depend>nav_msgs</depend>
+  <depend>geometry_msgs</depend>
+  <depend>std_msgs</depend>
+  <depend>tf2</depend>
+  <depend>tf2_ros</depend>
+  <depend>tf2_geometry_msgs</depend>
   <exec_depend>ament_index_python</exec_depend>
   <exec_depend>launch</exec_depend>
   <exec_depend>launch_ros</exec_depend>

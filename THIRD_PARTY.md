@@ -44,6 +44,12 @@ https://github.com/SteveMacenski/slam_toolbox/blob/humble/config/mapper_params_o
 SLAM Toolbox is maintained by Steve Macenski and contributors; the installed
 2.6.10 package declares LGPL. Upstream files retain their own license notices:
 https://github.com/SteveMacenski/slam_toolbox/tree/humble
-No SLAM implementation is copied or patched. Project configuration sets Scout
+No SLAM implementation is copied or patched. Project configuration sets robot
 frames, simulation time, sensor range, map update rate and motion thresholds.
+The parallel profile runs three independent installed instances with separate
+maps and adjusted encoder-prior penalties. `slam_frontend` (measured initial
+alignment and peer masking) and `map_fusion` (replaceable grid composition) are
+original Search Squad nodes. The invalid-range behavior was checked against
+the upstream Humble Karto implementation; no Karto source is incorporated:
+https://github.com/SteveMacenski/slam_toolbox/blob/humble/lib/karto_sdk/include/karto_sdk/Karto.h
 Nav2 map saving and ROS 2 teleop_twist_keyboard are unmodified installed tools.

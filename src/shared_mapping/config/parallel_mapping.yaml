@@ -1,0 +1,14 @@
+slam_frontend:
+  ros__parameters:
+    use_sim_time: true
+    robots: [scout, explorer_1, explorer_2]
+    # Encloses a Burger peer and a conservative allowance for encoder pose error.
+    peer_radius: 0.22
+    scan_timeout: 0.6
+map_fusion:
+  ros__parameters:
+    use_sim_time: true
+    robots: [scout, explorer_1, explorer_2]
+    resolution: 0.05
+    map_timeout: 3.0
+    max_cells: 2000000
