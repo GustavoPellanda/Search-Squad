@@ -1,5 +1,7 @@
+#include <algorithm>
 #include <cmath>
 #include <limits>
+#include <random>
 #include <stdexcept>
 #include <vector>
 
@@ -126,5 +128,40 @@ TEST(CorridorGeometry, TerminalWallCanStraddleTheScanAngularOrigin)
     points.push_back({unavailable, unavailable});
     for(int index = 0; index <= 40; ++index) points.push_back({2.0, -index * 0.925 / 40.0});
     EXPECT_TRUE(geometry.estimate(points, {{0.0, 0.0}, 0.0}, 1.0).terminal_candidate);
+}
+TEST(CorridorGeometry, CloseNoisyTerminalWallRetainsItsShortMeasuredFragments)
+{
+    // Reproduce the actual near-wall scan topology: front wall across angular
+    // origin, two corners and side walls, with the Burger's 1 cm range noise.
+    // A 35 cm minimum discarded the ~34 cm central fragments at this distance.
+    perception::GeometryConfiguration configuration;
+    configuration.min_segment_length = 0.15;
+    perception::CorridorGeometry geometry(configuration);
+    std::mt19937 generator(7);
+    std::normal_distribution<double> noise(0.0, 0.01);
+    const double pi = std::acos(-1.0);
+    for(int sample = 1; sample <= 20; ++sample) {
+        std::vector<perception::Point> points;
+        for(int beam = 0; beam < 360; ++beam) {
+            const double angle = beam * 2 * pi / 360;
+            const double forward = std::cos(angle);
+            const double lateral = std::sin(angle);
+            const double front_range = forward > 0.0 ? 0.40 / forward : 100.0;
+            const double side_range = std::abs(lateral) > 0.00001 ?
+                0.925 / std::abs(lateral) : 100.0;
+            const double range = std::min(front_range, side_range) + noise(generator);
+            if(range <= 3.5) {
+                points.push_back({range * forward - 0.032, range * lateral});
+            }
+            else {
+                const double missing = std::numeric_limits<double>::quiet_NaN();
+                points.push_back({missing, missing});
+            }
+        }
+        const auto estimate = geometry.estimate(points, {{0.0, 0.0}, 0.0}, sample * 0.1);
+        ASSERT_TRUE(estimate.axis_valid);
+        EXPECT_TRUE(estimate.terminal_candidate) << "Near-wall sample " << sample;
+        EXPECT_NEAR(estimate.width, 1.85, 0.04);
+    }
 }
 }  // namespace

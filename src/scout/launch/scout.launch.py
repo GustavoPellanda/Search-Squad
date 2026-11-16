@@ -1,4 +1,4 @@
-"""Compose the permanent Scout behavior and its local corridor perception."""
+"""Compose corridor perception, fuzzy steering and Scout navigation."""
 import os
 
 from ament_index_python.packages import get_package_share_directory
@@ -23,6 +23,15 @@ def generate_launch_description() -> LaunchDescription:
         PythonLaunchDescriptionSource(perception_path),
         launch_arguments={'robot': robot}.items(),
     )
+    # Both nodes read shared scales/limits from one YAML; only the fuzzy node
+    # reads steering_rules. It pairs its result with the original observation:
+    fuzzy = Node(
+        package='scout',
+        executable='fuzzy_steering',
+        namespace=robot,
+        parameters=[config, {'use_sim_time': True}],
+        output='screen',
+    )
     follower = Node(
         package='scout',
         executable='corridor_follower',
@@ -37,5 +46,6 @@ def generate_launch_description() -> LaunchDescription:
         DeclareLaunchArgument('robot', default_value='scout'),
         DeclareLaunchArgument('autostart', default_value='false', choices=['true', 'false']),
         perception,
+        fuzzy,
         follower,
     ])

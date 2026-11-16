@@ -1,6 +1,11 @@
 # Lembretes:
 
-- A navegação do scout ainda não considera curvas. Se der tempo, eu tenho que fazer algum sistema para diferenciar um buraco de porta de uma curva no corredor e fazer o robô virar quando encontrar uma parede de fundo. Por enquanto, também não tem nada para o caso de ter obstáculos no corredor.
+- A navegação do scout ainda não considera curvas. Se der tempo, eu tenho que fazer algum sistema para diferenciar um buraco de porta de uma curva no corredor e fazer o robô virar quando encontrar uma parede de fundo. Por enquanto, também não tem nada para o caso de ter obstáculos ou bifurcações no corredor.
+
+
+# System overview:
+
+
 
 # Perception node:
 
@@ -28,12 +33,12 @@ The `extract_segments()` method groups consecutive points, separating them at ga
 
 Each accepted segment is stored as a `LineSegment`, containing its endpoint coordinates, center, angle, length and fitting error. The `associate_walls()` method selects approximately parallel segments belonging to the corridor walls on the left and right of the robot.
 
-The robot's heading starts the search direction. The measured walls then refine the corridor heading, with longer segments contributing more. A valid axis requires both walls to be available and their separation to be within the configured width limits.
+The robot's heading starts the search direction. The measu  red walls then refine the corridor heading, with longer segments contributing more. A valid axis requires both walls to be available and their separation to be within the configured width limits.
 
 The `calculate_axis()` method calculates the perpendicular distances to those walls:
 
 ```cpp
-if(left_available) estimate.left_distance = left - position;
+if(left_available) estimate.left_distance = left - position;    
 if(right_available) estimate.right_distance = position - right;
 ```
 Here, `left`, `right` and `position` are the wall and robot positions projected perpendicular to the corridor. The corridor width is `left - right`, and its central axis lies halfway between the walls. The lateral error measures the robot's displacement from that axis, positive to the left. The angular error is the robot's heading minus the corridor's heading.
@@ -44,3 +49,10 @@ These measurements return to `corridor_perception` for publication and will late
 Door openings: `find_openings()` marks gaps between 0.60 and 2.00 m between measured segments of the same wall as opening candidates. They are not confirmed doors. A missing wall can be marked as predicted using its last observation, limited to 20 seconds and 1.5 m of displacement from that observation's robot position.
 
 Back wall: `terminal_wall_evidence()` looks for approximately perpendicular segments ahead of the robot. If aligned fragments cover more than 75% of the valid corridor width, they are marked as a back-wall candidate. This does not yet make the Scout stop or turn.
+
+
+# Scout node:
+
+### corridor_follower.cpp
+
+### fuzzy_steering.cpp

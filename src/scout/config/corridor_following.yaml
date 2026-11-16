@@ -1,4 +1,34 @@
 /**:
   ros__parameters:
-    # Initial corridor policy: straight advance, no lateral/heading correction yet.
-    linear_speed: 0.08
+    # Both Scout nodes read this file; values are unchanged by the node split.
+    # The follower regulates forward motion; the fuzzy node calculates direction.
+    linear_speed: 0.10
+    # Shared scales/limit: inference in fuzzy_steering, speed factors in corridor_follower.
+    max_angular_speed: 0.60
+    lateral_error_scale: 0.35
+    heading_error_scale: 0.524
+    # Reject geometry outside this small corridor-following operating domain:
+    max_lateral_error: 0.55
+    max_heading_error: 0.524
+    min_wall_distance: 0.25
+    min_confidence: 0.10
+    observation_timeout: 0.30
+    odom_timeout: 0.50
+    # Clearance starts at the front footprint edge, not the laser mount.
+    front_stop_clearance: 0.25
+    front_slow_clearance: 0.80
+    # Hold position during terminal verification despite small LiDAR range noise:
+    terminal_clearance_tolerance: 0.04
+    terminal_confirmation_time: 1.5
+    terminal_min_observations: 5
+    linear_acceleration: 0.10
+    angular_acceleration: 0.80
+    # Only fuzzy_steering reads these 25 constant Sugeno consequents.
+    # Rows = lateral error, columns = heading error, both NB NS ZE PS PB.
+    # Positive consequents turn left; errors positive to the left turn right.
+    steering_rules: [
+       1.00,  1.00,  0.80,  0.35,  0.00,
+       1.00,  0.65,  0.35,  0.00, -0.35,
+       0.90,  0.50,  0.00, -0.50, -0.90,
+       0.35,  0.00, -0.35, -0.65, -1.00,
+       0.00, -0.35, -0.80, -1.00, -1.00]

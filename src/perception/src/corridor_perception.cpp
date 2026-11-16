@@ -332,7 +332,9 @@ std::vector<perception::Point> CorridorPerception::project_scan_to_odom(
     const double unavailable = std::numeric_limits<double>::quiet_NaN();
     for(std::size_t index = 0; index < scan_->ranges.size(); ++index) {
         const double range = scan_->ranges[index];
-        if(!std::isfinite(range) || range < scan_->range_min || range > scan_->range_max) {
+        const bool no_return = std::isinf(range) && range > 0.0;
+        if(!no_return &&
+            (!std::isfinite(range) || range < scan_->range_min || range > scan_->range_max)) {
             // Preserve an invalid ray's place so line extraction cannot bridge the gap:
             points.push_back({unavailable, unavailable});
             continue;
@@ -340,14 +342,19 @@ std::vector<perception::Point> CorridorPerception::project_scan_to_odom(
 
         // Polar LiDAR coordinates -> Cartesian sensor coordinates -> encoder odom:
         const double angle = scan_->angle_min + index * scan_->angle_increment;
-        const double sensor_x = range * std::cos(angle);
-        const double sensor_y = range * std::sin(angle);
+        // Positive infinity means no hit within range_max. Use that finite horizon
+        // for clearance only; it must never become a fitted wall at sensor range:
+        const double distance = no_return ? scan_->range_max : range;
+        const double sensor_x = distance * std::cos(angle);
+        const double sensor_y = distance * std::sin(angle);
         const tf2::Vector3 point = laser_to_odom * tf2::Vector3(sensor_x, sensor_y, 0.0);
-        points.push_back({point.x(), point.y()});
+        const perception::Point endpoint{point.x(), point.y()};
+        points.push_back(no_return ? perception::Point{unavailable, unavailable} : endpoint);
 
         // Evaluate forward clearance in the base frame: only returns in the frontal
-        // footprint band count. Measure from its front edge, clamping overlap to zero:
-        const auto base_point = point_in_base_frame(points.back());
+        // footprint band count, including bounded no-hit horizons. Measure from
+        // its front edge, clamping overlap to zero. NaN rays supply no clearance:
+        const auto base_point = point_in_base_frame(endpoint);
         if(base_point.x >= 0.0 &&
             std::abs(base_point.y) < footprint_half_width_ + front_band_margin_) {
             front_clearance = std::min(
@@ -399,7 +406,8 @@ CorridorPerception::Observation CorridorPerception::make_observation(
     observation.right_wall_age = estimate.right_age;
     observation.confidence = estimate.confidence;
 
-    // No return in the frontal band means unavailable clearance, not infinite free space:
+    // No usable frontal ray means unavailable clearance. A +inf ray contributes
+    // only its finite range horizon, never an infinitely clear path or a wall:
     observation.front_clearance_valid = std::isfinite(front_clearance);
     observation.front_clearance = std::isfinite(front_clearance) ? front_clearance :
         std::numeric_limits<double>::quiet_NaN();

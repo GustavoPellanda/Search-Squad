@@ -7,7 +7,9 @@
     # Split adjacent returns at physical gaps; fit each run with perpendicular error:
     point_gap: 0.22
     max_residual: 0.035
-    min_segment_length: 0.35
+    # Close terminal walls split into short pieces at corners and the scan origin.
+    # Keep these measured pieces so their combined transverse coverage is retained:
+    min_segment_length: 0.15
     min_segment_points: 6
     # Keep longitudinal support near the tracked structural walls, not room back walls:
     max_heading_difference: 0.20
