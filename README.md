@@ -42,14 +42,8 @@ Ideally, the robots would distribute themselves throughout the environment, dyna
 
 # Technical Specifications
 
-The project is developed on **Ubuntu 22.04**, using **ROS 2 Humble** to organize the robot behaviors and communication between components. The main technologies used are:
+The project is developed on **Ubuntu 22.04**, using **ROS 2 Humble** to organize the robot behaviors and communication between components. 
 
-- **C++17:** Implementation of perception, motion control, mapping, and coordination nodes.
-- **Python and YAML:** Launch files and configuration of the robots and their behaviors.
-- **Gazebo Classic 11:** Simulation of the indoor environment and three TurtleBot3 Burger robots, including their LiDAR sensors and differential-drive motion.
-- **Nav2:** Path planning, path following, and collision monitoring.
-- **SLAM Toolbox:** LiDAR-based mapping and localization in the separate Scout SLAM profile.
-- **TF2:** Management of coordinate transformations between robot, sensor, odometry, and map reference frames.
-- **RViz2:** Visualization of maps, sensor readings, robot poses, and navigation information.
-- **Cyclone DDS:** Communication middleware used by ROS 2.
-- **colcon and ament_cmake:** Build tools for the ROS 2 workspace and its packages.
+**ROS 2 (Robot Operating System)** is a framework for building robot software from components called **nodes**, each responsible for a specific task, such as interpreting sensor readings or controlling movement. Nodes exchange structured messages through named channels called **topics**: a node **publishes** data to a topic, while other nodes **subscribe** to receive it. For example, the Scout's simulated LiDAR publishes distance measurements on `/scout/scan`, which perception nodes subscribe to and process. ROS 2 also provides **services** for request-and-response interactions and **actions** for longer tasks that report progress and support cancellation, such as navigation.
+
+The folders directly under the workspace's `src/` are ROS 2 **packages**, grouping related nodes, libraries, or interface definitions. Within a package, `src/` contains C++ implementations, `include/` contains headers, `launch/` contains Python files that start and connect nodes, and `config/` contains YAML parameters, where applicable. Each package declares its dependencies in `package.xml` and its build rules in `CMakeLists.txt`. The `squad_interfaces` package defines shared message, service, and action types in `msg/`, `srv/`, and `action/`.
