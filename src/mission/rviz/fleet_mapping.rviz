@@ -41,6 +41,13 @@ Visualization Manager:
     Topic:
       Value: /scout/corridor_markers
       Reliability Policy: Reliable
+  - Class: rviz_default_plugins/MarkerArray
+    Name: Confirmed room entrances
+    Enabled: true
+    Topic:
+      Value: /fleet/markers
+      Durability Policy: Transient Local
+      Reliability Policy: Reliable
   - Class: rviz_default_plugins/Polygon
     Name: Physical footprint stop zone
     Enabled: true

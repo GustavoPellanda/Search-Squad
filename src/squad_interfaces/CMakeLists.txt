@@ -8,6 +8,7 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/ControlLease.msg" "msg/RobotEvent.msg" "msg/SafetyState.msg"
   "msg/CorridorObservation.msg"
   "msg/FuzzySteering.msg"
+  "msg/Entrance.msg" "msg/EntranceArray.msg"
   "srv/SetControl.srv" "action/ExploreRoom.action"
   DEPENDENCIES geometry_msgs std_msgs
 )

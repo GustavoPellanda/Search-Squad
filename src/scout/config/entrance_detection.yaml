@@ -1,0 +1,36 @@
+/**:
+  ros__parameters:
+    # Distances are metres, angles radians and times seconds.
+    map_frame: map
+    observation_timeout: 0.3
+    map_timeout: 3.0
+
+    # Confirmation needs distinct scans AND a changed viewpoint in encoder odom.
+    min_observations: 4
+    min_viewpoint_change: 0.08
+    # Preserve the nearest views: oblique distant samples overestimate jamb spacing.
+    # Only views within 10% of the best observed distance refine the geometry.
+    max_view_distance_ratio: 1.10
+    candidate_timeout: 2.0
+
+    # Match the same opening across scans without merging neighbouring entrances.
+    association_distance: 0.35
+    width_tolerance: 0.35
+    orientation_tolerance: 0.25
+    max_endpoint_offset: 0.18
+    # Recover measured jamb support omitted from fitted wall fragments at corners.
+    wall_return_tolerance: 0.06
+
+    # Rays must cross the central opening and continue this far into the room.
+    # Positive infinity supplies only range_max; NaN and invalid rays supply nothing.
+    edge_margin: 0.10
+    min_open_depth: 0.25
+    min_crossing_rays: 3
+
+    # A map is corroboration: unknown cells neither confirm nor reject an opening.
+    occupied_threshold: 65
+    # Discontinuous odometry resets the session. A large map correction keeps local
+    # IDs but withdraws old projections until those entrances are observed again.
+    max_odom_jump: 0.5
+    max_map_translation_jump: 0.25
+    max_map_rotation_jump: 0.15

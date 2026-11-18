@@ -1,4 +1,4 @@
-"""Compose corridor perception, fuzzy steering and Scout navigation."""
+"""Compose corridor perception, fuzzy steering, Scout navigation and entrance detection."""
 import os
 
 from ament_index_python.packages import get_package_share_directory
@@ -42,10 +42,26 @@ def generate_launch_description() -> LaunchDescription:
         }],
         output='screen',
     )
+    # Detection observes the same scan-time geometry without requesting motion.
+    # Fleet topics are integration remappings; the executable keeps relative names.
+    detector = Node(
+        package='scout',
+        executable='entrance_detector',
+        namespace=robot,
+        parameters=[os.path.join(
+            get_package_share_directory('perception'), 'config', 'corridor_perception.yaml'
+        ), os.path.join(
+            get_package_share_directory('scout'), 'config', 'entrance_detection.yaml'
+        ), {'use_sim_time': True}],
+        remappings=[('map', '/map'), ('entrances', '/fleet/entrances'),
+                    ('entrance_markers', '/fleet/markers')],
+        output='screen',
+    )
     return LaunchDescription([
         DeclareLaunchArgument('robot', default_value='scout'),
         DeclareLaunchArgument('autostart', default_value='false', choices=['true', 'false']),
         perception,
         fuzzy,
         follower,
+        detector,
     ])
