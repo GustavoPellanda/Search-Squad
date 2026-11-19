@@ -14,7 +14,9 @@ The execution of the mission starts with the Scout. This robot will have to navi
 
 A Fuzzy control system uses the detected walls to guide the Scout throgh corridors. Considering the distance between walls, how well centered the robot is and if it points in the same direction as the corridor, the fuzzy sistem makes the robot turn left or right. It also detects a back wall at the end of the corridor (explain how) and stops it when the corridor ends. {Package: Scout}
 
-The scout creates a map... (finish)
+The scout creates a map... 
+
+Dispatcher sends explores to the rooms... (finish)
 
 
 # Lidar Safety package:
