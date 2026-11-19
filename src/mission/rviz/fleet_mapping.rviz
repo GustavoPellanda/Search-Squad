@@ -1,8 +1,14 @@
 Panels:
 - Class: rviz_common/Displays
   Name: Displays
+- Class: rviz_common/Views
+  Name: Views
+  Expanded:
+  - /Current View1
 Visualization Manager:
   Class: ''
+  Tools:
+  - Class: rviz_default_plugins/MoveCamera
   Global Options:
     Fixed Frame: map
     Background Color: 40; 40; 40
@@ -92,10 +98,15 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz_default_plugins/TopDownOrtho
+      Name: Current View
       Scale: 60
       Target Frame: map
       X: 4.0
       Y: 0.0
 Window Geometry:
+  Hide Left Dock: false
+  Hide Right Dock: false
+  Views:
+    collapsed: false
   Width: 1200
   Height: 850

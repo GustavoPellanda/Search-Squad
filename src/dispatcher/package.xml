@@ -1,0 +1,19 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>dispatcher</name>
+  <version>0.1.0</version>
+  <description>Preliminary fixed assignments from detected entrances to explorers.</description>
+  <maintainer email="gusfipe@gmail.com">Gustavo Pellanda</maintainer>
+  <license>Apache-2.0</license>
+  <buildtool_depend>ament_cmake</buildtool_depend>
+  <depend>rclcpp</depend>
+  <depend>rclcpp_action</depend>
+  <depend>geometry_msgs</depend>
+  <depend>nav2_msgs</depend>
+  <depend>nav_msgs</depend>
+  <depend>lifecycle_msgs</depend>
+  <depend>squad_interfaces</depend>
+  <depend>tf2</depend>
+  <depend>tf2_ros</depend>
+  <export><build_type>ament_cmake</build_type></export>
+</package>

@@ -4,6 +4,8 @@
 
 - Fica legal criar uma central de resultados no do final da missão e colocar umas coisas visuais para fazer análises. Fica legal colocar um comparativo dos mapas feitos por cada robô individualmente com sobreposição ao ground truth do Gazebo com o mapa compartilhado. Que sabe as rotas que cada robô fez também. Pensar se tem mais alguma coisa. O mapa de entradas detectadas pelo scout fica legal também.
 
+- Às vezes as rotas dos explorers não ficam otimizadas porque o scout deixa uns pequenos espaços não mapeados por onde ele passou. Não decidi o que fazer em relação a isso ainda. 
+
 # System overview:
 
 Every robot in the squad has a base anti-colison system, to prevent them from crashing into walls or obstacles. Using their Lidar sensors, they will stop if they're too close from an object in front of them. {Package: Lidar Safety}

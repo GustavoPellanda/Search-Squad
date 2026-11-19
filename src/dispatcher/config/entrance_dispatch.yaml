@@ -1,0 +1,11 @@
+entrance_dispatcher:
+  ros__parameters:
+    # Fixed preliminary assignments; these are entrance IDs, never map coordinates.
+    robots: [explorer_1, explorer_2]
+    entrance_ids: [entrance_1, entrance_2]
+    approach_distance: 0.55
+    # Stop just inside the room after crossing its detected threshold.
+    entry_distance: 0.40
+    # Prefer an observed point near the centre without approaching the jambs.
+    entry_lateral_search: 0.30
+    entry_jamb_margin: 0.30

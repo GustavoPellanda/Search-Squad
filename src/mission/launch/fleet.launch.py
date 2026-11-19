@@ -1,12 +1,13 @@
-"""Assemble the simulation and the controllers for one selected fleet robot.
+"""Assemble the protected fleet and its selected behavior profile.
 
 All modes spawn and protect the three robots. Hold keeps the selected command
 source fixed; reactive starts standalone roaming. Navigation and room add live
 mapping and a supervisor that owns command selection. Navigation roams when idle;
 room waits for an assignment. The other robots keep their hold command source.
-The default starts fuzzy Scout following, parallel individual SLAM and one shared
-map. Explorers are localized but held until a separate test or a future task
-controller supplies destinations. Other legacy profiles retain assisted mapping.
+The default starts fuzzy Scout following, parallel individual SLAM, one shared
+map and fixed entrance assignments using supervised Nav2 for both explorers.
+dispatch_entrances:=false retains Scout-only motion. Other legacy profiles retain
+their command selection and assisted mapping.
 """
 import json
 import os
@@ -54,9 +55,18 @@ def compose(context: LaunchContext) -> list:
     task_file = LaunchConfiguration('task_file').perform(context)
     test_map = LaunchConfiguration('test_map').perform(context)
     log_file = LaunchConfiguration('log_file').perform(context)
+    dispatch_option = LaunchConfiguration('dispatch_entrances').perform(context)
+    # Enable dispatch by default only where both explorers have common-map localization:
+    if dispatch_option == 'auto':
+        dispatch_entrances = mode == 'scout' and mapping_backend == 'parallel_slam'
+    else:
+        dispatch_entrances = dispatch_option == 'true'
+
+    if dispatch_entrances and (mode != 'scout' or mapping_backend != 'parallel_slam'):
+        raise ValueError('dispatch_entrances requires mode:=scout mapping_backend:=parallel_slam')
 
     # Each SLAM owns its map->odom edge; fusion alone owns the public /map.
-    # Global explorer task/navigation profiles remain separate from this mapping increment:
+    # Other explorer navigation profiles keep their existing mapping backend:
     if mapping_backend in ('scout_slam', 'parallel_slam'):
         if robot != 'scout' or mode not in ('hold', 'scout'):
             raise ValueError('SLAM backends require robot:=scout and mode:=hold|scout')
@@ -89,13 +99,17 @@ def compose(context: LaunchContext) -> list:
 
     # Every robot gets its own spawn and protection chain; only one source is selected:
     actions = [include('simulation', 'world.launch.py', gui=gui)]
-    actions.extend(create_robot_actions(fleet, robot, source, obstacle_test_pose))
+    actions.extend(create_robot_actions(
+        fleet, robot, source, obstacle_test_pose, dispatch_entrances
+    ))
 
     # Mapping backends are exclusive; parallel SLAM also aligns the explorers' map frames:
     if mapping_backend == 'scout_slam':
         actions.append(include('shared_mapping', 'scout_slam.launch.py'))
     elif mapping_backend == 'parallel_slam':
         actions.append(include('shared_mapping', 'parallel_slam.launch.py'))
+    if dispatch_entrances:
+        actions.extend(create_entrance_dispatch_actions())
 
     # Mapping and supervised Nav2 are shared by navigation and room profiles:
     if managed_navigation:
@@ -137,7 +151,8 @@ def include(package: str, filename: str, **arguments) -> GroupAction:
 
 
 def create_robot_actions(
-    fleet: dict, selected_robot: str, selected_source: str, obstacle_test_pose: bool
+    fleet: dict, selected_robot: str, selected_source: str, obstacle_test_pose: bool,
+    dispatch_entrances: bool = False,
 ) -> list:
     """Spawn each Burger at its configured pose and connect its protected command input."""
     actions = []
@@ -149,6 +164,8 @@ def create_robot_actions(
             source = selected_source
             if obstacle_test_pose:
                 pose = fleet['obstacle_test_pose']
+        if dispatch_entrances and robot in ('explorer_1', 'explorer_2'):
+            source = 'managed'
         pose_arguments = {coordinate: str(value) for coordinate, value in pose.items()}
         actions.append(include('simulation', 'robot.launch.py', robot=robot, **pose_arguments))
 
@@ -160,6 +177,33 @@ def create_robot_actions(
             source=source,
         ))
     return actions
+
+
+def create_entrance_dispatch_actions() -> list:
+    """Enable fixed door approaches and room entry without starting room exploration."""
+    actions = []
+    for robot in ('explorer_1', 'explorer_2'):
+        actions.append(include(
+            'indoor_navigation',
+            'navigation.launch.py',
+            robot=robot,
+            roam_on_idle='false',
+            enable_room_filter='false',
+            clear_static_footprint='true',
+            use_protection_footprint='true',
+        ))
+    # The parallel SLAM backend already supplies map and each robot's localization.
+    # Use the existing public supervisor action; no additional mapper or TF authority:
+    dispatcher = Node(
+        package='dispatcher',
+        executable='entrance_dispatcher',
+        parameters=[os.path.join(
+            get_package_share_directory('dispatcher'), 'config', 'entrance_dispatch.yaml'
+        ), {'use_sim_time': True}],
+        remappings=[('entrances', '/fleet/entrances'), ('events', '/fleet/events')],
+        output='screen',
+    )
+    return actions + [dispatcher]
 
 
 def create_mapping_actions() -> list:
@@ -316,6 +360,12 @@ def generate_launch_description() -> LaunchDescription:
             default_value='hold',
             choices=['hold', 'test', 'nav', 'reactive'],
             description='Fixed command input in hold mode; other modes choose their own source.',
+        ),
+        DeclareLaunchArgument(
+            'dispatch_entrances',
+            default_value='auto',
+            choices=['auto', 'true', 'false'],
+            description='Auto sends explorer_1/2 through entrance_1/2 in Scout parallel SLAM mode.',
         ),
     ]
     viewer_arguments = [

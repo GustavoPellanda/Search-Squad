@@ -31,5 +31,7 @@
   <exec_depend>launch_ros</exec_depend>
   <exec_depend>python3-yaml</exec_depend>
   <exec_depend>nav2_map_server</exec_depend>
+  <exec_depend>navigation</exec_depend>
+  <exec_depend>lidar_safety</exec_depend>
   <export><build_type>ament_cmake</build_type></export>
 </package>
